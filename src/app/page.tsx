@@ -7,6 +7,7 @@ import type {
   ItemSearchRow,
   KpiSolicitanteRow,
   KpiStatusRow,
+  LeadTimes,
   Transferencia,
 } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/queries";
@@ -57,6 +58,12 @@ import {
   IconX,
 } from "@/components/icons";
 
+const PERIOD_LABEL: Record<"today" | "7d" | "30d", string> = {
+  today: "Hoje",
+  "7d": "7 dias",
+  "30d": "30 dias",
+};
+
 const STATUS_COLOR: Record<string, string> = {
   L: "#64748b",
   E: "#3b82f6",
@@ -101,6 +108,9 @@ export default function Page() {
     status: KpiStatusRow[];
     solicitantes: KpiSolicitanteRow[];
   } | null>(null);
+  const [leadTimes, setLeadTimes] = useState<LeadTimes | null>(null);
+  const [leadPeriod, setLeadPeriod] = useState<"today" | "7d" | "30d">("30d");
+  const [leadLoading, setLeadLoading] = useState(false);
   const [transfs, setTransfs] = useState<Transferencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -159,6 +169,14 @@ export default function Page() {
     const id = setInterval(load, 15_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    setLeadLoading(true);
+    fetchJson<LeadTimes>(`/api/kpis/lead-times?period=${leadPeriod}`)
+      .then(setLeadTimes)
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLeadLoading(false));
+  }, [leadPeriod]);
 
   useEffect(() => {
     if (!selecionada) {
@@ -492,6 +510,36 @@ export default function Page() {
             />
           </section>
 
+          {/* Lead time */}
+          <Card
+            title="Lead time médio"
+            subtitle={
+              leadTimes
+                ? `${PERIOD_LABEL[leadPeriod]} · ${leadTimes.N_CONCLUIDAS} concluídas de ${leadTimes.N_TOTAL}`
+                : "Carregando…"
+            }
+            icon={<IconClock size={15} />}
+            action={
+              <div className="flex items-center gap-1 rounded-md bg-[var(--surface-2)] p-0.5 border border-[var(--border)]">
+                {(["today", "7d", "30d"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setLeadPeriod(p)}
+                    className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                      leadPeriod === p
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[var(--text-muted)] hover:text-[var(--text)]"
+                    }`}
+                  >
+                    {PERIOD_LABEL[p]}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            <LeadTimePanel data={leadTimes} loading={leadLoading} />
+          </Card>
+
           {/* Charts row */}
           <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <Card
@@ -511,7 +559,7 @@ export default function Page() {
             </Card>
             <Card
               title="Top solicitantes"
-              subtitle="Quem mais abre transferências"
+              subtitle="Últimos 30 dias"
               className="lg:col-span-3"
               icon={<IconUser size={15} />}
             >
@@ -1525,4 +1573,111 @@ function SkeletonList({ rows = 4 }: { rows?: number }) {
 
 function SkeletonBlock({ height = 120 }: { height?: number }) {
   return <div className="skeleton w-full" style={{ height }} />;
+}
+
+function fmtDuracao(h: number | null | undefined): string {
+  if (h == null || !Number.isFinite(h)) return "—";
+  const horas = Math.max(0, h);
+  if (horas < 1) return `${Math.round(horas * 60)} min`;
+  if (horas < 24) return `${horas.toFixed(1)} h`;
+  const dias = horas / 24;
+  return `${dias.toFixed(1)} d`;
+}
+
+function LeadTimePanel({
+  data,
+  loading,
+}: {
+  data: LeadTimes | null;
+  loading: boolean;
+}) {
+  if (loading) return <SkeletonBlock height={140} />;
+  if (!data || !data.H_LEAD_TIME)
+    return <Empty msg="Sem dados suficientes." />;
+
+  const saida = Math.max(0, data.H_SAIDA ?? 0);
+  const rota = Math.max(0, data.H_ROTA ?? 0);
+  const entrada = Math.max(0, data.H_ENTRADA ?? 0);
+  const total = saida + rota + entrada || 1;
+  const lead = data.H_LEAD_TIME ?? total;
+
+  const etapas = [
+    {
+      key: "saida",
+      label: "Conferência saída",
+      hint: "Criação → conferência na origem",
+      hours: saida,
+      color: "#f59e0b",
+    },
+    {
+      key: "rota",
+      label: "Em rota",
+      hint: "Conferência saída → leitura no destino",
+      hours: rota,
+      color: "#8b5cf6",
+    },
+    {
+      key: "entrada",
+      label: "Conferência entrada",
+      hint: "Leitura → conferência no destino",
+      hours: entrada,
+      color: "#10b981",
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <div className="text-4xl font-semibold tabular-nums tracking-tight">
+          {fmtDuracao(lead)}
+        </div>
+        <div className="text-xs text-[var(--text-muted)]">
+          criação → conclusão
+        </div>
+      </div>
+
+      <div>
+        <div className="h-3 rounded-full overflow-hidden flex bg-[var(--surface-2)]">
+          {etapas.map((e) => (
+            <div
+              key={e.key}
+              title={`${e.label}: ${fmtDuracao(e.hours)}`}
+              className="h-full transition-all"
+              style={{
+                width: `${(e.hours / total) * 100}%`,
+                background: e.color,
+              }}
+            />
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {etapas.map((e) => {
+            const pct = (e.hours / total) * 100;
+            return (
+              <div
+                key={e.key}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span
+                    className="size-2 rounded-full shrink-0"
+                    style={{ background: e.color }}
+                  />
+                  <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                    {e.label}
+                  </span>
+                </div>
+                <div className="text-xl font-semibold tabular-nums">
+                  {fmtDuracao(e.hours)}
+                </div>
+                <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                  {pct.toFixed(0)}% do lead time · {e.hint}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }

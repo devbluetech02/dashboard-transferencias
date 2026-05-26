@@ -57,6 +57,15 @@ export interface ItemSearchRow {
   DESTINO: string;
 }
 
+export interface LeadTimes {
+  H_SAIDA: number | null;
+  H_ROTA: number | null;
+  H_ENTRADA: number | null;
+  H_LEAD_TIME: number | null;
+  N_CONCLUIDAS: number;
+  N_TOTAL: number;
+}
+
 export interface KpiStatusRow {
   POSICAO: string;
   TOTAL: number;
