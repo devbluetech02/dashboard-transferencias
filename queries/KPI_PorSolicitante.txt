@@ -1,0 +1,8 @@
+SELECT
+  e.nome_guerra || ' (' || t.CODFUNC || ')' AS SOLICITANTE,
+  COUNT(*) AS TOTAL
+FROM WINDOW.TAB_CONTROLE_TRANSF t
+LEFT JOIN WINDOW.PCEMPR e ON e.matricula = t.Codfunc
+WHERE t.TRANSACAO >= 1442
+GROUP BY e.nome_guerra || ' (' || t.CODFUNC || ')'
+ORDER BY TOTAL DESC
