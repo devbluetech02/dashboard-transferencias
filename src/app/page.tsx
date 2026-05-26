@@ -124,6 +124,7 @@ export default function Page() {
   const TAMANHO_PAGINA = 25;
 
   const [selecionada, setSelecionada] = useState<Transferencia | null>(null);
+  const [voltarParaItens, setVoltarParaItens] = useState(false);
   const [itens, setItens] = useState<Item[] | null>(null);
   const [itensLoading, setItensLoading] = useState(false);
   const [itemExpandido, setItemExpandido] = useState<number | null>(null);
@@ -143,6 +144,7 @@ export default function Page() {
   const [itensSearch, setItensSearch] = useState<ItemSearchRow[] | null>(null);
   const [itensSearchLoading, setItensSearchLoading] = useState(false);
   const [itensSearchModalOpen, setItensSearchModalOpen] = useState(false);
+  const [itensSearchFilterTx, setItensSearchFilterTx] = useState("");
 
   async function load() {
     setLoading(true);
@@ -224,6 +226,7 @@ export default function Page() {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setSelecionada(null);
+        setVoltarParaItens(false);
         setEtiquetasModalOpen(false);
         setItensSearchModalOpen(false);
       }
@@ -300,9 +303,34 @@ export default function Page() {
     [counts],
   );
 
+  async function abrirTransacao(transacao: number) {
+    const local = transfs.find((t) => t.TRANSACAO === transacao);
+    if (local) {
+      setVoltarParaItens(true);
+      setSelecionada(local);
+      setItensSearchModalOpen(false);
+      return;
+    }
+    try {
+      const t = await fetchJson<Transferencia | null>(
+        `/api/transferencias/${transacao}`,
+      );
+      if (!t) {
+        setErr(`Transferência ${transacao} não encontrada.`);
+        return;
+      }
+      setVoltarParaItens(true);
+      setSelecionada(t);
+      setItensSearchModalOpen(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function buscarItens() {
     if (!codprodQuery.trim()) return;
     setItensSearchModalOpen(true);
+    setItensSearchFilterTx("");
     setItensSearchLoading(true);
     try {
       const r = await fetchJson<{ rows: ItemSearchRow[] }>(
@@ -742,7 +770,7 @@ export default function Page() {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 anim-fade"
           />
           <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-12 pointer-events-none">
-            <div className="relative w-full max-w-5xl max-h-[80vh] rounded-2xl glass shadow-2xl flex flex-col anim-fade pointer-events-auto">
+            <div className="relative w-full max-w-7xl max-h-[80vh] rounded-2xl glass shadow-2xl flex flex-col anim-fade pointer-events-auto">
               <div className="px-5 py-4 border-b border-[var(--border)] flex items-center gap-3">
                 <div className="size-10 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center">
                   <IconLayers size={18} />
@@ -760,7 +788,19 @@ export default function Page() {
                   <div className="text-xs text-[var(--text-muted)] mt-0.5">
                     {itensSearchLoading
                       ? "Carregando…"
-                      : `${itensSearch?.length ?? 0} ocorrência${(itensSearch?.length ?? 0) === 1 ? "" : "s"}`}
+                      : (() => {
+                          const total = itensSearch?.length ?? 0;
+                          const filtered = itensSearchFilterTx
+                            ? (itensSearch?.filter((r) =>
+                                String(r.TRANSACAO).includes(
+                                  itensSearchFilterTx.trim(),
+                                ),
+                              ).length ?? 0)
+                            : total;
+                          return itensSearchFilterTx
+                            ? `${filtered} de ${total} ocorrência${total === 1 ? "" : "s"}`
+                            : `${total} ocorrência${total === 1 ? "" : "s"}`;
+                        })()}
                   </div>
                 </div>
                 <button
@@ -771,10 +811,45 @@ export default function Page() {
                   <IconX size={16} />
                 </button>
               </div>
+              <div className="px-5 pt-4">
+                <div className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text-muted)] focus-within:border-[var(--accent)] transition">
+                  <IconSearch size={15} className="text-[var(--text-muted)]" />
+                  <input
+                    value={itensSearchFilterTx}
+                    onChange={(e) => setItensSearchFilterTx(e.target.value)}
+                    placeholder="Filtrar por nº da transação…"
+                    className="bg-transparent flex-1 outline-none text-[var(--text)] placeholder:text-[var(--text-muted)]"
+                  />
+                  {itensSearchFilterTx && (
+                    <button
+                      onClick={() => setItensSearchFilterTx("")}
+                      className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]"
+                    >
+                      <IconX size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {itensSearchLoading ? (
-                  <SkeletonList rows={6} />
-                ) : itensSearch?.length ? (
+                {(() => {
+                  const filtered = itensSearch?.filter((r) =>
+                    itensSearchFilterTx
+                      ? String(r.TRANSACAO).includes(
+                          itensSearchFilterTx.trim(),
+                        )
+                      : true,
+                  );
+                  if (itensSearchLoading) return <SkeletonList rows={6} />;
+                  if (!filtered?.length)
+                    return (
+                      <div className="py-12 text-center text-sm text-[var(--text-muted)] flex flex-col items-center gap-2">
+                        <IconLayers size={28} className="opacity-40" />
+                        {itensSearch?.length
+                          ? "Nenhuma transação corresponde ao filtro."
+                          : "Nenhum item encontrado."}
+                      </div>
+                    );
+                  return (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="text-xs uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border)]">
@@ -789,22 +864,12 @@ export default function Page() {
                         </tr>
                       </thead>
                       <tbody>
-                        {itensSearch.map((r) => {
-                          const transf = transfs.find(
-                            (t) => t.TRANSACAO === r.TRANSACAO,
-                          );
+                        {filtered.map((r) => {
                           return (
                             <tr
                               key={`${r.TRANSACAO}-${r.CODPROD}`}
-                              onClick={() => {
-                                if (transf) {
-                                  setSelecionada(transf);
-                                  setItensSearchModalOpen(false);
-                                }
-                              }}
-                              className={`border-b border-[var(--border)] hover:bg-[var(--surface-2)]/60 ${
-                                transf ? "cursor-pointer" : ""
-                              }`}
+                              onClick={() => abrirTransacao(r.TRANSACAO)}
+                              className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]/60 cursor-pointer"
                             >
                               <Td className="font-mono">{r.CODPROD}</Td>
                               <Td className="truncate max-w-64">
@@ -843,12 +908,8 @@ export default function Page() {
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="py-12 text-center text-sm text-[var(--text-muted)] flex flex-col items-center gap-2">
-                    <IconLayers size={28} className="opacity-40" />
-                    Nenhum item encontrado.
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -967,10 +1028,26 @@ export default function Page() {
       {selecionada && (
         <>
           <div
-            onClick={() => setSelecionada(null)}
+            onClick={() => {
+              setSelecionada(null);
+              setVoltarParaItens(false);
+            }}
             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 anim-fade"
           />
           <aside className="fixed right-0 top-0 h-screen w-full md:w-[640px] glass border-l border-[var(--border)] z-40 shadow-2xl anim-slide flex flex-col">
+            {voltarParaItens && (
+              <button
+                onClick={() => {
+                  setSelecionada(null);
+                  setVoltarParaItens(false);
+                  setItensSearchModalOpen(true);
+                }}
+                className="px-5 py-2.5 border-b border-[var(--border)] flex items-center gap-2 text-xs text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors"
+              >
+                <IconArrowRight size={14} className="rotate-180" />
+                Voltar para busca por item
+              </button>
+            )}
             <div className="px-5 py-4 border-b border-[var(--border)] flex items-start gap-3">
               <div className="size-10 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center">
                 <IconTruck size={18} />
@@ -995,7 +1072,10 @@ export default function Page() {
                 </div>
               </div>
               <button
-                onClick={() => setSelecionada(null)}
+                onClick={() => {
+                  setSelecionada(null);
+                  setVoltarParaItens(false);
+                }}
                 className="size-8 rounded-md hover:bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)]"
                 aria-label="Fechar"
               >
