@@ -14,6 +14,8 @@ SELECT
     WHEN t.CODFILIALORIG = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALORIG = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -29,6 +31,8 @@ SELECT
     WHEN t.CODFILIALDEST = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALDEST = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO,
   t.TRANSFESTOQUE                                  AS TRANSF_GERENCIAL,
@@ -70,6 +74,8 @@ SELECT
     WHEN t.CODFILIALORIG = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALORIG = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -85,6 +91,8 @@ SELECT
     WHEN t.CODFILIALDEST = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALDEST = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO,
   t.TRANSFESTOQUE                                  AS TRANSF_GERENCIAL,
@@ -204,6 +212,8 @@ SELECT
     WHEN t.CODFILIALORIG = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALORIG = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -219,6 +229,8 @@ SELECT
     WHEN t.CODFILIALDEST = 22                  THEN 'CAMPINAS, SP'
     WHEN t.CODFILIALDEST = 25                  THEN 'SERRA, ES'
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
+    WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
+    WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO
 FROM WINDOW.TAB_CONTROLE_ITEM_TRANSF i
