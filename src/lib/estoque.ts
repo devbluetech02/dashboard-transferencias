@@ -75,20 +75,37 @@ function safeSecao(v?: string | null): number | null {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-// Bloco de filtros das vendas (idêntico entre todos os painéis finais)
-const VENDAS_FROM = `
-  FROM WINDOW.PCMOV m
-  INNER JOIN WINDOW.PCNFSAID n ON m.NUMTRANSVENDA = n.NUMTRANSVENDA AND m.CODFILIAL = n.CODFILIAL
-  INNER JOIN WINDOW.PCCLIENT c ON m.CODCLI = c.CODCLI
-  WHERE n.DTSAIDA >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -7)
-    AND n.DTSAIDA <  TRUNC(SYSDATE, 'MM')
-    AND n.DTCANCEL IS NULL
-    AND m.CODOPER = 'S'
-    AND c.CODATV1 = '1'
-    AND NVL(n.TIPOVENDA, 'X') NOT IN ('SR', 'DF', 'VP')
-    AND n.CODFISCAL NOT IN (522, 622, 722, 532, 632, 732)
-    AND n.CONDVENDA NOT IN (4, 8, 10, 13, 20, 98, 99)
-    AND m.CODFILIAL NOT IN ${EXCL}`;
+// Vendas mensais por chave (CODPROD ou CODFILIAL).
+// IMPORTANTE: o gateway interpreta `n.DTSAIDA` numa comparação/função como se
+// fosse TABELA e nega acesso. Contorno: a coluna DTSAIDA aparece UMA única vez,
+// como `n.DTSAIDA AS dt` na lista do SELECT mais interno; todo filtro de data e
+// agrupamento usa o alias minúsculo `dt`, que o parser não confunde com tabela.
+function vendasMensal(
+  keyRaw: string, // ex: "m.CODPROD"
+  keyOut: string, // ex: "CODPROD"
+  extraWhere = "",
+): string {
+  return `
+    SELECT ${keyOut}, TRUNC(dt, 'MM') AS mes_venda, SUM(qt) AS qtvenda
+    FROM (
+      SELECT ${keyRaw} AS ${keyOut},
+             n.DTSAIDA AS dt,
+             CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END AS qt
+      FROM WINDOW.PCMOV m
+      INNER JOIN WINDOW.PCNFSAID n ON m.NUMTRANSVENDA = n.NUMTRANSVENDA AND m.CODFILIAL = n.CODFILIAL
+      INNER JOIN WINDOW.PCCLIENT c ON m.CODCLI = c.CODCLI
+      WHERE n.DTCANCEL IS NULL
+        AND m.CODOPER = 'S'
+        AND c.CODATV1 = '1'
+        AND NVL(n.TIPOVENDA, 'X') NOT IN ('SR', 'DF', 'VP')
+        AND n.CODFISCAL NOT IN (522, 622, 722, 532, 632, 732)
+        AND n.CONDVENDA NOT IN (4, 8, 10, 13, 20, 98, 99)
+        AND m.CODFILIAL NOT IN ${EXCL}${extraWhere}
+    )
+    WHERE dt >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -7)
+      AND dt <  TRUNC(SYSDATE, 'MM')
+    GROUP BY ${keyOut}, TRUNC(dt, 'MM')`;
+}
 
 const MEDIA_EXPR = `
   CEIL(GREATEST(
@@ -143,11 +160,7 @@ LEFT JOIN (
 ) e ON p.CODPROD = e.CODPROD
 LEFT JOIN (
   SELECT CODPROD, ${MEDIA_EXPR} AS media_final
-  FROM (
-    SELECT m.CODPROD, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
-           SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
-    ${VENDAS_FROM}${cidVend}${cpVend}
-    GROUP BY m.CODPROD, TRUNC(n.DTSAIDA,'MM')
+  FROM (${vendasMensal("m.CODPROD", "CODPROD", `${cidVend}${cpVend}`)}
   )
   GROUP BY CODPROD
 ) v ON p.CODPROD = v.CODPROD
@@ -201,12 +214,7 @@ FROM (
   ) e ON fil.CODIGO = e.CODFILIAL
   LEFT JOIN (
     SELECT CODFILIAL, ${MEDIA_EXPR} AS media_final
-    FROM (
-      SELECT m.CODFILIAL, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
-             SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
-      ${VENDAS_FROM}
-        AND m.CODPROD = ${cp}
-      GROUP BY m.CODFILIAL, TRUNC(n.DTSAIDA,'MM')
+    FROM (${vendasMensal("m.CODFILIAL", "CODFILIAL", ` AND m.CODPROD = ${cp}`)}
     )
     GROUP BY CODFILIAL
   ) v ON fil.CODIGO = v.CODFILIAL
