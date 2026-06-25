@@ -123,26 +123,9 @@ export function qEstoqueConsolidado(opts: {
   const cpProd = codprod ? ` AND p.CODPROD = '${codprod}'` : "";
   const secProd = secao !== null ? ` AND p.CODSEC = ${secao}` : "";
 
+  // Sem WITH/CTE: o gateway trata nomes de CTE como tabelas e nega acesso.
+  // Tudo via subqueries inline (derived tables), como em Q_LEAD_TIMES.
   return `
-WITH estoque AS (
-  SELECT CODPROD, SUM(QUANTIDADE) AS total_estoque
-  FROM WINDOW.TAB_CODBARRAS
-  WHERE CONFERIU = 'N'
-    AND CODFILIAL NOT IN ${EXCL}
-    AND TRUNC(DATA) <= TRUNC(SYSDATE)${cidEstq}${cpEstq}
-  GROUP BY CODPROD
-),
-vendas AS (
-  SELECT m.CODPROD, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
-         SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
-  ${VENDAS_FROM}${cidVend}${cpVend}
-  GROUP BY m.CODPROD, TRUNC(n.DTSAIDA,'MM')
-),
-medias AS (
-  SELECT CODPROD, ${MEDIA_EXPR} AS media_final
-  FROM vendas
-  GROUP BY CODPROD
-)
 SELECT
   TO_NUMBER(p.CODPROD) AS CODPROD,
   p.DESCRICAO,
@@ -150,8 +133,24 @@ SELECT
   COALESCE(v.media_final, 0)   AS VENDA_MEDIA,
   ${MESES_CASE("COALESCE(e.total_estoque,0)", "COALESCE(v.media_final,0)")} AS MESES_ESTQ
 FROM WINDOW.PCPRODUT p
-LEFT JOIN estoque e ON p.CODPROD = e.CODPROD
-LEFT JOIN medias  v ON p.CODPROD = v.CODPROD
+LEFT JOIN (
+  SELECT CODPROD, SUM(QUANTIDADE) AS total_estoque
+  FROM WINDOW.TAB_CODBARRAS
+  WHERE CONFERIU = 'N'
+    AND CODFILIAL NOT IN ${EXCL}
+    AND TRUNC(DATA) <= TRUNC(SYSDATE)${cidEstq}${cpEstq}
+  GROUP BY CODPROD
+) e ON p.CODPROD = e.CODPROD
+LEFT JOIN (
+  SELECT CODPROD, ${MEDIA_EXPR} AS media_final
+  FROM (
+    SELECT m.CODPROD, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
+           SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
+    ${VENDAS_FROM}${cidVend}${cpVend}
+    GROUP BY m.CODPROD, TRUNC(n.DTSAIDA,'MM')
+  )
+  GROUP BY CODPROD
+) v ON p.CODPROD = v.CODPROD
 WHERE p.CODEPTO = 19
   AND p.DESCRICAO NOT LIKE '*%'${secProd}${cpProd}
   AND (COALESCE(e.total_estoque,0) > 0 OR COALESCE(v.media_final,0) > 0)
@@ -180,44 +179,41 @@ const CIDADE_CASE = `
 export function qEstoquePorCidade(codprodRaw: string): string {
   const codprod = safeCodprod(codprodRaw);
   const cp = codprod ? `'${codprod}'` : "NULL";
+  // Sem CTE — subqueries inline.
   return `
-WITH estoque_cid AS (
-  SELECT b.CODFILIAL, SUM(b.QUANTIDADE) AS total_estoque
-  FROM WINDOW.TAB_CODBARRAS b
-  WHERE b.CONFERIU = 'N'
-    AND b.CODFILIAL NOT IN ${EXCL}
-    AND TRUNC(b.DATA) <= TRUNC(SYSDATE)
-    AND b.CODPROD = ${cp}
-  GROUP BY b.CODFILIAL
-),
-vendas_cid AS (
-  SELECT m.CODFILIAL, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
-         SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
-  ${VENDAS_FROM}
-    AND m.CODPROD = ${cp}
-  GROUP BY m.CODFILIAL, TRUNC(n.DTSAIDA,'MM')
-),
-medias_cid AS (
-  SELECT CODFILIAL, ${MEDIA_EXPR} AS media_final
-  FROM vendas_cid
-  GROUP BY CODFILIAL
-),
-agg AS (
-  SELECT ${CIDADE_CASE} AS CIDADE,
-         SUM(COALESCE(e.total_estoque,0)) AS total_estoque,
-         SUM(COALESCE(v.media_final,0))   AS total_venda
-  FROM WINDOW.PCFILIAL fil
-  LEFT JOIN estoque_cid e ON fil.CODIGO = e.CODFILIAL
-  LEFT JOIN medias_cid  v ON fil.CODIGO = v.CODFILIAL
-  WHERE fil.CODIGO NOT IN ${EXCL}
-  GROUP BY ${CIDADE_CASE}
-)
 SELECT CIDADE,
-       total_estoque AS ESTOQ_ATUAL,
-       total_venda   AS VENDA_MEDIA,
-       ${MESES_CASE("total_estoque", "total_venda")} AS MESES_ESTQ
-FROM agg
-WHERE total_estoque > 0 OR total_venda > 0
+       SUM(te) AS ESTOQ_ATUAL,
+       SUM(tv) AS VENDA_MEDIA,
+       ${MESES_CASE("SUM(te)", "SUM(tv)")} AS MESES_ESTQ
+FROM (
+  SELECT ${CIDADE_CASE} AS CIDADE,
+         COALESCE(e.total_estoque,0) AS te,
+         COALESCE(v.media_final,0)   AS tv
+  FROM WINDOW.PCFILIAL fil
+  LEFT JOIN (
+    SELECT b.CODFILIAL, SUM(b.QUANTIDADE) AS total_estoque
+    FROM WINDOW.TAB_CODBARRAS b
+    WHERE b.CONFERIU = 'N'
+      AND b.CODFILIAL NOT IN ${EXCL}
+      AND TRUNC(b.DATA) <= TRUNC(SYSDATE)
+      AND b.CODPROD = ${cp}
+    GROUP BY b.CODFILIAL
+  ) e ON fil.CODIGO = e.CODFILIAL
+  LEFT JOIN (
+    SELECT CODFILIAL, ${MEDIA_EXPR} AS media_final
+    FROM (
+      SELECT m.CODFILIAL, TRUNC(n.DTSAIDA,'MM') AS mes_venda,
+             SUM(CASE WHEN n.CONDVENDA = 7 THEN m.QTCONT ELSE m.QT END) AS qtvenda
+      ${VENDAS_FROM}
+        AND m.CODPROD = ${cp}
+      GROUP BY m.CODFILIAL, TRUNC(n.DTSAIDA,'MM')
+    )
+    GROUP BY CODFILIAL
+  ) v ON fil.CODIGO = v.CODFILIAL
+  WHERE fil.CODIGO NOT IN ${EXCL}
+)
+GROUP BY CIDADE
+HAVING SUM(te) > 0 OR SUM(tv) > 0
 ORDER BY MESES_ESTQ DESC NULLS LAST
 `;
 }
