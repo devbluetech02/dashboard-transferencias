@@ -53,6 +53,13 @@ export const CIDADES: { label: string; codigos: number[] }[] = [
   { label: "CURITIBA", codigos: [12, 72] },
   { label: "PORTO ALEGRE", codigos: [8] },
   { label: "VALPARAISO DE GOIAS", codigos: [20, 82] },
+  { label: "SERRA", codigos: [25] },
+  { label: "PALHOCA", codigos: [26] },
+  { label: "COTIA", codigos: [27] },
+  { label: "SAO GONCALO", codigos: [28] },
+  { label: "CONTAGEM", codigos: [29] },
+  { label: "UBERABA", codigos: [30] },
+  { label: "RIBEIRAO PRETO", codigos: [32] },
 ];
 
 const EXCL = "(6, 81, 92)";
@@ -190,6 +197,13 @@ function cidadeCase(col: string): string {
     WHEN ${col} IN (12,72)                      THEN 'CURITIBA'
     WHEN ${col} = 8                             THEN 'PORTO ALEGRE'
     WHEN ${col} IN (20,82)                      THEN 'VALPARAISO DE GOIAS'
+    WHEN ${col} = 25                            THEN 'SERRA'
+    WHEN ${col} = 26                            THEN 'PALHOCA'
+    WHEN ${col} = 27                            THEN 'COTIA'
+    WHEN ${col} = 28                            THEN 'SAO GONCALO'
+    WHEN ${col} = 29                            THEN 'CONTAGEM'
+    WHEN ${col} = 30                            THEN 'UBERABA'
+    WHEN ${col} = 32                            THEN 'RIBEIRAO PRETO'
     ELSE 'FILIAL ' || TO_CHAR(${col})
   END`;
 }

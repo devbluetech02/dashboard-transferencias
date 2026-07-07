@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CIDADES } from "@/lib/estoque";
 import type {
   EstoqueProdutoRow,
   EstoqueCidadeRow,
@@ -67,17 +66,15 @@ export default function EstoquePage() {
   const [err, setErr] = useState<string | null>(null);
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
 
-  // filtros
-  const [cidade, setCidade] = useState("");
+  // filtros da lista (cidade NÃO é filtro aqui — é dimensão de drill no detalhe)
   const [secao, setSecao] = useState("");
-  const [codprodFiltro, setCodprodFiltro] = useState("");
-  const [busca, setBusca] = useState(""); // filtro client por descrição/código
+  const [busca, setBusca] = useState("");
 
   // paginação
   const [pagina, setPagina] = useState(1);
   const TAMANHO_PAGINA = 25;
 
-  // drawer
+  // detalhe
   const [sel, setSel] = useState<EstoqueProdutoRow | null>(null);
 
   const load = useCallback(async () => {
@@ -85,9 +82,7 @@ export default function EstoquePage() {
     setErr(null);
     try {
       const qs = new URLSearchParams();
-      if (cidade) qs.set("cidade", cidade);
       if (secao) qs.set("secao", secao);
-      if (codprodFiltro) qs.set("codprod", codprodFiltro);
       const r = await fetch(`/api/estoque?${qs}`, { cache: "no-store" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Erro ao carregar");
@@ -98,7 +93,7 @@ export default function EstoquePage() {
     } finally {
       setLoading(false);
     }
-  }, [cidade, secao, codprodFiltro]);
+  }, [secao]);
 
   useEffect(() => {
     load();
@@ -123,7 +118,7 @@ export default function EstoquePage() {
 
   useEffect(() => {
     setPagina(1);
-  }, [cidade, secao, codprodFiltro, busca]);
+  }, [secao, busca]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / TAMANHO_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -172,20 +167,6 @@ export default function EstoquePage() {
             {secoes.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Cidade */}
-          <select
-            value={cidade}
-            onChange={(e) => setCidade(e.target.value)}
-            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none [color-scheme:dark] cursor-pointer"
-          >
-            <option value="">Nacional (todas)</option>
-            {CIDADES.map((c) => (
-              <option key={c.label} value={c.label}>
-                {c.label}
               </option>
             ))}
           </select>
@@ -310,9 +291,7 @@ export default function EstoquePage() {
         </section>
       </main>
 
-      {sel && (
-        <ProdutoDrawer produto={sel} cidade={cidade} onClose={() => setSel(null)} />
-      )}
+      {sel && <ProdutoDetalhe produto={sel} onClose={() => setSel(null)} />}
     </div>
   );
 }
@@ -342,17 +321,10 @@ function Pagination({
         {inicio}–{fim} de {total}
       </div>
       <div className="flex items-center gap-1">
-        <PageBtn
-          disabled={pagina <= 1}
-          onClick={() => onChange(pagina - 1)}
-          label="‹"
-        />
+        <PageBtn disabled={pagina <= 1} onClick={() => onChange(pagina - 1)} label="‹" />
         {paginas.map((p, i) =>
           p === "…" ? (
-            <span
-              key={`gap-${i}`}
-              className="px-2 text-[var(--text-muted)] select-none"
-            >
+            <span key={`gap-${i}`} className="px-2 text-[var(--text-muted)] select-none">
               …
             </span>
           ) : (
@@ -360,20 +332,14 @@ function Pagination({
               key={p}
               onClick={() => onChange(p)}
               className={`min-w-8 h-8 px-2 rounded-md text-sm tabular-nums transition-colors ${
-                p === pagina
-                  ? "bg-[var(--accent)] text-white"
-                  : "hover:bg-[var(--surface-2)]"
+                p === pagina ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--surface-2)]"
               }`}
             >
               {p}
             </button>
           ),
         )}
-        <PageBtn
-          disabled={pagina >= totalPaginas}
-          onClick={() => onChange(pagina + 1)}
-          label="›"
-        />
+        <PageBtn disabled={pagina >= totalPaginas} onClick={() => onChange(pagina + 1)} label="›" />
       </div>
     </div>
   );
@@ -414,27 +380,33 @@ function pageRange(current: number, total: number): (number | "…")[] {
 }
 
 // ============================================================================
-// Drawer de detalhe do produto: cidades + lotes + etiquetas
+// Detalhe do produto — master-detail: Cidade › Lote › Etiqueta
 // ============================================================================
-function ProdutoDrawer({
+type LoteGrupo = {
+  lote: string;
+  itens: EtiquetaEstoqueRow[];
+  metros: number;
+};
+
+function ProdutoDetalhe({
   produto,
-  cidade,
   onClose,
 }: {
   produto: EstoqueProdutoRow;
-  cidade: string;
   onClose: () => void;
 }) {
+  const cod = produto.CODPROD;
+
   const [cidades, setCidades] = useState<EstoqueCidadeRow[]>([]);
-  const [lotes, setLotes] = useState<string[]>([]);
-  const [lote, setLote] = useState("ALL");
   const [etiquetas, setEtiquetas] = useState<EtiquetaEstoqueRow[]>([]);
   const [loadingCid, setLoadingCid] = useState(true);
   const [loadingEtq, setLoadingEtq] = useState(true);
   const [errCid, setErrCid] = useState<string | null>(null);
   const [errEtq, setErrEtq] = useState<string | null>(null);
 
-  const cod = produto.CODPROD;
+  // "" = todas as cidades
+  const [cidadeSel, setCidadeSel] = useState("");
+  const [loteAberto, setLoteAberto] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -442,6 +414,7 @@ function ProdutoDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Cidades: números de venda/meses por cidade (endpoint dedicado)
   useEffect(() => {
     setLoadingCid(true);
     setErrCid(null);
@@ -453,21 +426,13 @@ function ProdutoDrawer({
       })
       .catch((e) => setErrCid(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingCid(false));
+  }, [cod]);
 
-    const qs = new URLSearchParams({ codprod: String(cod) });
-    if (cidade) qs.set("cidade", cidade);
-    fetch(`/api/estoque/lotes?${qs}`)
-      .then((r) => r.json())
-      .then((d) => setLotes(d.lotes ?? []))
-      .catch(() => {});
-  }, [cod, cidade]);
-
+  // Etiquetas: TODAS de uma vez; drill por cidade/lote é client-side
   useEffect(() => {
     setLoadingEtq(true);
     setErrEtq(null);
-    const qs = new URLSearchParams({ codprod: String(cod), lote });
-    if (cidade) qs.set("cidade", cidade);
-    fetch(`/api/estoque/etiquetas?${qs}`)
+    fetch(`/api/estoque/etiquetas?codprod=${cod}&lote=ALL`)
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Erro ao carregar etiquetas");
@@ -475,142 +440,246 @@ function ProdutoDrawer({
       })
       .catch((e) => setErrEtq(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingEtq(false));
-  }, [cod, lote, cidade]);
+  }, [cod]);
 
-  const totalEtq = etiquetas.reduce((s, e) => s + (e.METROS || 0), 0);
+  // Trocar de cidade fecha o lote aberto (contexto muda)
+  useEffect(() => {
+    setLoteAberto(null);
+  }, [cidadeSel]);
+
+  // Etiquetas da cidade selecionada (ou todas), agrupadas por lote
+  const lotes = useMemo<LoteGrupo[]>(() => {
+    const src = cidadeSel
+      ? etiquetas.filter((e) => (e.FILIAL ?? "").toUpperCase() === cidadeSel.toUpperCase())
+      : etiquetas;
+    const map = new Map<string, EtiquetaEstoqueRow[]>();
+    for (const e of src) {
+      const k = e.LOTEPRODUTO || "(sem lote)";
+      const arr = map.get(k);
+      if (arr) arr.push(e);
+      else map.set(k, [e]);
+    }
+    return Array.from(map, ([lote, itens]) => ({
+      lote,
+      itens,
+      metros: itens.reduce((s, i) => s + (i.METROS || 0), 0),
+    })).sort((a, b) => b.metros - a.metros);
+  }, [etiquetas, cidadeSel]);
+
+  const totalMetros = lotes.reduce((s, l) => s + l.metros, 0);
+  const totalEtq = lotes.reduce((s, l) => s + l.itens.length, 0);
+  const status = mesesClass(produto.MESES_ESTQ);
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <aside className="relative anim-slide w-full max-w-2xl h-full bg-[var(--surface-solid)] border-l border-[var(--border)] overflow-y-auto">
-        <div className="sticky top-0 glass border-b border-[var(--border)] px-5 py-4 flex items-start gap-3 z-10">
+      <aside className="relative anim-slide w-full max-w-5xl h-full bg-[var(--surface-solid)] border-l border-[var(--border)] flex flex-col">
+        {/* Cabeçalho */}
+        <div className="glass border-b border-[var(--border)] px-5 py-4 flex items-start gap-4 shrink-0">
           <div className="flex-1 min-w-0">
             <div className="text-xs text-[var(--text-muted)] font-mono">#{cod}</div>
-            <h2 className="text-base font-semibold leading-tight">{produto.DESCRICAO}</h2>
+            <h2 className="text-base font-semibold leading-tight truncate">{produto.DESCRICAO}</h2>
+            <div className="flex items-center gap-4 mt-2 text-[13px]">
+              <span className="text-[var(--text-muted)]">
+                Estoque <b className="text-[var(--text)] tabular-nums">{nf(produto.ESTOQ_ATUAL)}</b> m
+              </span>
+              <span className="text-[var(--text-muted)]">
+                V. média <b className="text-[var(--text)] tabular-nums">{nf(produto.VENDA_MEDIA)}</b>
+              </span>
+              <span className="text-[var(--text-muted)]">
+                Meses <b className="text-[var(--text)] tabular-nums">{nf(produto.MESES_ESTQ, 1)}</b>
+              </span>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] border ${status.cls}`}>
+                {status.label}
+              </span>
+            </div>
           </div>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] p-1">
             <IconX size={18} />
           </button>
         </div>
 
-        <div className="p-5 space-y-6">
-          {/* Resumo */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="glass rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-[var(--text-muted)]">Estoque</div>
-              <div className="text-lg font-semibold tabular-nums">{nf(produto.ESTOQ_ATUAL)}</div>
+        {/* Master-detail */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-[240px_1fr] min-h-0">
+          {/* Coluna: cidades */}
+          <div className="border-b md:border-b-0 md:border-r border-[var(--border)] overflow-y-auto">
+            <div className="px-4 py-2.5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-2 sticky top-0 bg-[var(--surface-solid)] z-10">
+              <IconChart size={13} /> Cidades
             </div>
-            <div className="glass rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-[var(--text-muted)]">Venda média</div>
-              <div className="text-lg font-semibold tabular-nums">{nf(produto.VENDA_MEDIA)}</div>
-            </div>
-            <div className="glass rounded-lg px-3 py-2.5">
-              <div className="text-[11px] text-[var(--text-muted)]">Meses estq.</div>
-              <div className="text-lg font-semibold tabular-nums">{nf(produto.MESES_ESTQ, 1)}</div>
-            </div>
+
+            {loadingCid && (
+              <div className="p-4 space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="skeleton h-9 w-full" />
+                ))}
+              </div>
+            )}
+            {!loadingCid && errCid && (
+              <div className="px-4 py-4 text-sm text-rose-300">{errCid}</div>
+            )}
+
+            {!loadingCid && !errCid && (
+              <ul className="pb-2">
+                <CidadeItem
+                  nome="Todas as cidades"
+                  estoque={produto.ESTOQ_ATUAL}
+                  ativa={cidadeSel === ""}
+                  onClick={() => setCidadeSel("")}
+                />
+                {cidades.map((c) => (
+                  <CidadeItem
+                    key={c.CIDADE}
+                    nome={c.CIDADE}
+                    estoque={c.ESTOQ_ATUAL}
+                    meses={c.MESES_ESTQ}
+                    ativa={cidadeSel.toUpperCase() === (c.CIDADE ?? "").toUpperCase()}
+                    onClick={() => setCidadeSel(c.CIDADE ?? "")}
+                  />
+                ))}
+                {cidades.length === 0 && (
+                  <li className="px-4 py-4 text-sm text-[var(--text-muted)]">Sem dados por cidade.</li>
+                )}
+              </ul>
+            )}
           </div>
 
-          {/* Por cidade */}
-          <section>
-            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <IconChart size={15} /> Estoque por cidade
-            </h3>
-            <div className="glass rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-[var(--text-muted)] border-b border-[var(--border)]">
-                    <th className="px-3 py-2 font-medium">Cidade</th>
-                    <th className="px-3 py-2 font-medium text-right">Estoque</th>
-                    <th className="px-3 py-2 font-medium text-right">V. média</th>
-                    <th className="px-3 py-2 font-medium text-right">Meses</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingCid && (
-                    <tr><td colSpan={4} className="px-3 py-4"><div className="skeleton h-4 w-full" /></td></tr>
-                  )}
-                  {!loadingCid && errCid && (
-                    <tr><td colSpan={4} className="px-3 py-4 text-center text-rose-300">{errCid}</td></tr>
-                  )}
-                  {!loadingCid && !errCid && cidades.length === 0 && (
-                    <tr><td colSpan={4} className="px-3 py-4 text-center text-[var(--text-muted)]">Sem dados.</td></tr>
-                  )}
-                  {cidades.map((c) => {
-                    const k = mesesClass(c.MESES_ESTQ);
-                    return (
-                      <tr key={c.CIDADE} className="border-b border-[var(--border)] last:border-0">
-                        <td className="px-3 py-2">{c.CIDADE}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{nf(c.ESTOQ_ATUAL)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{nf(c.VENDA_MEDIA)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] border ${k.cls}`}>
-                            {nf(c.MESES_ESTQ, 1)}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* Coluna: lotes da cidade selecionada */}
+          <div className="overflow-y-auto">
+            <div className="px-4 py-2.5 sticky top-0 bg-[var(--surface-solid)] z-10 border-b border-[var(--border)] flex items-center justify-between gap-3">
+              <div className="text-[11px] uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-2">
+                <IconBarcode size={13} /> Lotes {cidadeSel ? `· ${cidadeSel}` : "· nacional"}
+              </div>
+              <div className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                {nf(lotes.length)} lotes · {nf(totalEtq)} etiq · {nf(totalMetros)} m
+              </div>
             </div>
-          </section>
 
-          {/* Etiquetas / lotes */}
-          <section>
-            <div className="flex items-center justify-between mb-2 gap-3">
-              <h3 className="text-sm font-medium flex items-center gap-2">
-                <IconBarcode size={15} /> Etiquetas
-                <span className="text-[var(--text-muted)] font-normal">
-                  ({nf(etiquetas.length)} · {nf(totalEtq)} m)
-                </span>
-              </h3>
-              <select
-                value={lote}
-                onChange={(e) => setLote(e.target.value)}
-                className="px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-xs outline-none focus:border-[var(--accent)] max-w-[55%]"
-              >
-                <option value="ALL">Todos os lotes</option>
-                {lotes.map((l) => (
-                  <option key={l} value={l}>{l}</option>
+            <div className="p-4 space-y-2">
+              {loadingEtq &&
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="skeleton h-12 w-full" />
                 ))}
-              </select>
+              {!loadingEtq && errEtq && (
+                <div className="px-1 py-4 text-sm text-rose-300">{errEtq}</div>
+              )}
+              {!loadingEtq && !errEtq && lotes.length === 0 && (
+                <div className="px-1 py-10 text-center text-sm text-[var(--text-muted)]">
+                  Nenhuma etiqueta {cidadeSel ? `em ${cidadeSel}` : ""}.
+                </div>
+              )}
+              {!loadingEtq &&
+                lotes.map((l) => (
+                  <LoteCard
+                    key={l.lote}
+                    grupo={l}
+                    aberto={loteAberto === l.lote}
+                    mostrarCidade={!cidadeSel}
+                    onToggle={() => setLoteAberto(loteAberto === l.lote ? null : l.lote)}
+                  />
+                ))}
             </div>
-            <div className="glass rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-[var(--text-muted)] border-b border-[var(--border)]">
-                    <th className="px-3 py-2 font-medium">Cód. barras</th>
-                    <th className="px-3 py-2 font-medium">Lote</th>
-                    <th className="px-3 py-2 font-medium text-right">Metros</th>
-                    <th className="px-3 py-2 font-medium">Filial</th>
-                    <th className="px-3 py-2 font-medium">Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingEtq && (
-                    <tr><td colSpan={5} className="px-3 py-4"><div className="skeleton h-4 w-full" /></td></tr>
-                  )}
-                  {!loadingEtq && errEtq && (
-                    <tr><td colSpan={5} className="px-3 py-4 text-center text-rose-300">{errEtq}</td></tr>
-                  )}
-                  {!loadingEtq && !errEtq && etiquetas.length === 0 && (
-                    <tr><td colSpan={5} className="px-3 py-4 text-center text-[var(--text-muted)]">Sem etiquetas.</td></tr>
-                  )}
-                  {etiquetas.map((e) => (
-                    <tr key={e.CODBARID} className="border-b border-[var(--border)] last:border-0">
-                      <td className="px-3 py-2 font-mono text-xs">{e.CODBARID}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-[var(--text-muted)]">{e.LOTEPRODUTO}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{nf(e.METROS, 2)}</td>
-                      <td className="px-3 py-2">{e.FILIAL}</td>
-                      <td className="px-3 py-2 text-[var(--text-muted)]">{e.DATA}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function CidadeItem({
+  nome,
+  estoque,
+  meses,
+  ativa,
+  onClick,
+}: {
+  nome: string;
+  estoque: number;
+  meses?: number;
+  ativa: boolean;
+  onClick: () => void;
+}) {
+  const k = meses !== undefined ? mesesClass(meses) : null;
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-l-2 transition-colors ${
+          ativa
+            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+            : "border-transparent hover:bg-[var(--surface-2)]"
+        }`}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="text-sm truncate">{nome}</div>
+          <div className="text-[11px] text-[var(--text-muted)] tabular-nums">{nf(estoque)} m</div>
+        </div>
+        {k && (
+          <span className={`px-1.5 py-0.5 rounded text-[10px] border ${k.cls}`}>
+            {nf(meses ?? 0, 1)}
+          </span>
+        )}
+      </button>
+    </li>
+  );
+}
+
+function LoteCard({
+  grupo,
+  aberto,
+  mostrarCidade,
+  onToggle,
+}: {
+  grupo: LoteGrupo;
+  aberto: boolean;
+  mostrarCidade: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="glass rounded-lg overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full px-3.5 py-3 flex items-center gap-3 hover:bg-[var(--surface-2)] transition-colors"
+      >
+        <span
+          className={`text-[var(--text-muted)] transition-transform ${aberto ? "rotate-90" : ""}`}
+        >
+          <IconArrowRight size={15} />
+        </span>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-sm font-medium font-mono truncate">{grupo.lote}</div>
+          <div className="text-[11px] text-[var(--text-muted)]">
+            {nf(grupo.itens.length)} etiqueta{grupo.itens.length === 1 ? "" : "s"}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-sm font-semibold tabular-nums">{nf(grupo.metros, 2)} m</div>
+        </div>
+      </button>
+
+      {aberto && (
+        <div className="border-t border-[var(--border)] overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-[var(--text-muted)] border-b border-[var(--border)]">
+                <th className="px-3 py-2 font-medium">Cód. barras</th>
+                <th className="px-3 py-2 font-medium text-right">Metros</th>
+                {mostrarCidade && <th className="px-3 py-2 font-medium">Cidade</th>}
+                <th className="px-3 py-2 font-medium">Data</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grupo.itens.map((e) => (
+                <tr key={e.CODBARID} className="border-b border-[var(--border)] last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs">{e.CODBARID}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{nf(e.METROS, 2)}</td>
+                  {mostrarCidade && <td className="px-3 py-2">{e.FILIAL}</td>}
+                  <td className="px-3 py-2 text-[var(--text-muted)]">{e.DATA}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,9 @@ SELECT
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALORIG = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALORIG = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALORIG = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -33,6 +36,9 @@ SELECT
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALDEST = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALDEST = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALDEST = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO,
   t.TRANSFESTOQUE                                  AS TRANSF_GERENCIAL,
@@ -76,6 +82,9 @@ SELECT
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALORIG = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALORIG = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALORIG = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -93,6 +102,9 @@ SELECT
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALDEST = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALDEST = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALDEST = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO,
   t.TRANSFESTOQUE                                  AS TRANSF_GERENCIAL,
@@ -214,6 +226,9 @@ SELECT
     WHEN t.CODFILIALORIG = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALORIG = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALORIG = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALORIG = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALORIG = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALORIG = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALORIG)
   END AS ORIGEM,
   CASE
@@ -231,6 +246,9 @@ SELECT
     WHEN t.CODFILIALDEST = 26                  THEN 'PALHOÇA, SC'
     WHEN t.CODFILIALDEST = 27                  THEN 'COTIA, SP'
     WHEN t.CODFILIALDEST = 28                  THEN 'SÃO GONÇALO, RJ'
+    WHEN t.CODFILIALDEST = 29                  THEN 'CONTAGEM, MG'
+    WHEN t.CODFILIALDEST = 30                  THEN 'UBERABA, MG'
+    WHEN t.CODFILIALDEST = 32                  THEN 'RIBEIRÃO PRETO, SP'
     ELSE TO_CHAR(t.CODFILIALDEST)
   END AS DESTINO
 FROM WINDOW.TAB_CONTROLE_ITEM_TRANSF i
