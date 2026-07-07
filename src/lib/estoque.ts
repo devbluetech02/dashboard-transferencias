@@ -174,51 +174,60 @@ ORDER BY MESES_ESTQ ASC, CODPROD ASC
 // ----------------------------------------------------------------------------
 // Detalhamento por cidade (produto selecionado)
 // ----------------------------------------------------------------------------
-const CIDADE_CASE = `
+// Mapeia código de filial -> cidade. O gateway NEGA WINDOW.PCFILIAL, então não
+// dá pra dirigir a query por ela; o mapa já está hardcoded em CIDADES, então
+// aplicamos o CASE direto sobre a coluna CODFILIAL das tabelas liberadas.
+function cidadeCase(col: string): string {
+  return `
   CASE
-    WHEN fil.CODIGO IN (1,5,9,11,17,18,19,51,77,99) THEN 'GOIANIA'
-    WHEN fil.CODIGO IN (2,15,21,61,75)              THEN 'BRASILIA'
-    WHEN fil.CODIGO IN (3,16,31,76)                 THEN 'RIO DE JANEIRO'
-    WHEN fil.CODIGO IN (10,13,62,73)                THEN 'SAO PAULO'
-    WHEN fil.CODIGO = 22                            THEN 'CAMPINAS'
-    WHEN fil.CODIGO IN (4,14,41,74)                 THEN 'UBERLANDIA'
-    WHEN fil.CODIGO IN (7,71)                       THEN 'BELO HORIZONTE'
-    WHEN fil.CODIGO IN (12,72)                      THEN 'CURITIBA'
-    WHEN fil.CODIGO = 8                             THEN 'PORTO ALEGRE'
-    WHEN fil.CODIGO IN (20,82)                      THEN 'VALPARAISO DE GOIAS'
-    ELSE fil.CIDADE
+    WHEN ${col} IN (1,5,9,11,17,18,19,51,77,99) THEN 'GOIANIA'
+    WHEN ${col} IN (2,15,21,61,75)              THEN 'BRASILIA'
+    WHEN ${col} IN (3,16,31,76)                 THEN 'RIO DE JANEIRO'
+    WHEN ${col} IN (10,13,62,73)                THEN 'SAO PAULO'
+    WHEN ${col} = 22                            THEN 'CAMPINAS'
+    WHEN ${col} IN (4,14,41,74)                 THEN 'UBERLANDIA'
+    WHEN ${col} IN (7,71)                       THEN 'BELO HORIZONTE'
+    WHEN ${col} IN (12,72)                      THEN 'CURITIBA'
+    WHEN ${col} = 8                             THEN 'PORTO ALEGRE'
+    WHEN ${col} IN (20,82)                      THEN 'VALPARAISO DE GOIAS'
+    ELSE 'FILIAL ' || TO_CHAR(${col})
   END`;
+}
 
 export function qEstoquePorCidade(codprodRaw: string): string {
   const codprod = safeCodprod(codprodRaw);
   const cp = codprod ? `'${codprod}'` : "NULL";
-  // Sem CTE — subqueries inline.
+  // Sem PCFILIAL (negada) e sem CTE — FULL OUTER JOIN das derived tables por
+  // CODFILIAL, mapeando a cidade pelo CASE hardcoded.
   return `
 SELECT CIDADE,
        SUM(te) AS ESTOQ_ATUAL,
        SUM(tv) AS VENDA_MEDIA,
        ${MESES_CASE("SUM(te)", "SUM(tv)")} AS MESES_ESTQ
 FROM (
-  SELECT ${CIDADE_CASE} AS CIDADE,
-         COALESCE(e.total_estoque,0) AS te,
-         COALESCE(v.media_final,0)   AS tv
-  FROM WINDOW.PCFILIAL fil
-  LEFT JOIN (
-    SELECT b.CODFILIAL, SUM(b.QUANTIDADE) AS total_estoque
-    FROM WINDOW.TAB_CODBARRAS b
-    WHERE b.CONFERIU = 'N'
-      AND b.CODFILIAL NOT IN ${EXCL}
-      AND TRUNC(b.DATA) <= TRUNC(SYSDATE)
-      AND b.CODPROD = ${cp}
-    GROUP BY b.CODFILIAL
-  ) e ON fil.CODIGO = e.CODFILIAL
-  LEFT JOIN (
-    SELECT CODFILIAL, ${MEDIA_EXPR} AS media_final
-    FROM (${vendasMensal("m.CODFILIAL", "CODFILIAL", ` AND m.CODPROD = ${cp}`)}
-    )
-    GROUP BY CODFILIAL
-  ) v ON fil.CODIGO = v.CODFILIAL
-  WHERE fil.CODIGO NOT IN ${EXCL}
+  SELECT ${cidadeCase("cf")} AS CIDADE,
+         te,
+         tv
+  FROM (
+    SELECT COALESCE(e.CODFILIAL, v.CODFILIAL) AS cf,
+           COALESCE(e.total_estoque,0)        AS te,
+           COALESCE(v.media_final,0)          AS tv
+    FROM (
+      SELECT b.CODFILIAL, SUM(b.QUANTIDADE) AS total_estoque
+      FROM WINDOW.TAB_CODBARRAS b
+      WHERE b.CONFERIU = 'N'
+        AND b.CODFILIAL NOT IN ${EXCL}
+        AND TRUNC(b.DATA) <= TRUNC(SYSDATE)
+        AND b.CODPROD = ${cp}
+      GROUP BY b.CODFILIAL
+    ) e
+    FULL OUTER JOIN (
+      SELECT CODFILIAL, ${MEDIA_EXPR} AS media_final
+      FROM (${vendasMensal("m.CODFILIAL", "CODFILIAL", ` AND m.CODPROD = ${cp}`)}
+      )
+      GROUP BY CODFILIAL
+    ) v ON e.CODFILIAL = v.CODFILIAL
+  )
 )
 GROUP BY CIDADE
 HAVING SUM(te) > 0 OR SUM(tv) > 0
@@ -267,10 +276,9 @@ SELECT
   b.LOTEPRODUTO,
   CAST(b.QUANTIDADE AS NUMBER) AS METROS,
   TO_CHAR(b.DATA, 'DD/MM/YYYY') AS DATA,
-  f.CIDADE AS FILIAL
+  ${cidadeCase("b.CODFILIAL")} AS FILIAL
 FROM WINDOW.TAB_CODBARRAS b
 INNER JOIN WINDOW.PCPRODUT p ON b.CODPROD = p.CODPROD
-LEFT  JOIN WINDOW.PCFILIAL f ON b.CODFILIAL = f.CODIGO
 WHERE b.CONFERIU = 'N'
   AND b.CODFILIAL NOT IN ${EXCL}
   AND TRUNC(b.DATA) <= TRUNC(SYSDATE)

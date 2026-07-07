@@ -73,6 +73,10 @@ export default function EstoquePage() {
   const [codprodFiltro, setCodprodFiltro] = useState("");
   const [busca, setBusca] = useState(""); // filtro client por descrição/código
 
+  // paginação
+  const [pagina, setPagina] = useState(1);
+  const TAMANHO_PAGINA = 25;
+
   // drawer
   const [sel, setSel] = useState<EstoqueProdutoRow | null>(null);
 
@@ -117,6 +121,21 @@ export default function EstoquePage() {
     );
   }, [produtos, busca]);
 
+  useEffect(() => {
+    setPagina(1);
+  }, [cidade, secao, codprodFiltro, busca]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / TAMANHO_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const paginados = useMemo(
+    () =>
+      filtrados.slice(
+        (paginaAtual - 1) * TAMANHO_PAGINA,
+        paginaAtual * TAMANHO_PAGINA,
+      ),
+    [filtrados, paginaAtual],
+  );
+
   const kpis = useMemo(() => {
     const estoqueTotal = produtos.reduce((s, p) => s + (p.ESTOQ_ATUAL || 0), 0);
     const ruptura = produtos.filter((p) => p.MESES_ESTQ <= 0).length;
@@ -147,7 +166,7 @@ export default function EstoquePage() {
           <select
             value={secao}
             onChange={(e) => setSecao(e.target.value)}
-            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none"
+            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none [color-scheme:dark] cursor-pointer"
           >
             <option value="">Todas as seções</option>
             {secoes.map((s) => (
@@ -161,7 +180,7 @@ export default function EstoquePage() {
           <select
             value={cidade}
             onChange={(e) => setCidade(e.target.value)}
-            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none"
+            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none [color-scheme:dark] cursor-pointer"
           >
             <option value="">Nacional (todas)</option>
             {CIDADES.map((c) => (
@@ -248,7 +267,7 @@ export default function EstoquePage() {
                     </td>
                   </tr>
                 )}
-                {filtrados.map((p) => {
+                {paginados.map((p) => {
                   const c = mesesClass(p.MESES_ESTQ);
                   return (
                     <tr
@@ -277,6 +296,17 @@ export default function EstoquePage() {
               </tbody>
             </table>
           </div>
+          {filtrados.length > 0 && (
+            <div className="px-4 pb-3">
+              <Pagination
+                pagina={paginaAtual}
+                totalPaginas={totalPaginas}
+                total={filtrados.length}
+                tamanho={TAMANHO_PAGINA}
+                onChange={setPagina}
+              />
+            </div>
+          )}
         </section>
       </main>
 
@@ -285,6 +315,102 @@ export default function EstoquePage() {
       )}
     </div>
   );
+}
+
+// ============================================================================
+// Paginação
+// ============================================================================
+function Pagination({
+  pagina,
+  totalPaginas,
+  total,
+  tamanho,
+  onChange,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  total: number;
+  tamanho: number;
+  onChange: (p: number) => void;
+}) {
+  const inicio = (pagina - 1) * tamanho + 1;
+  const fim = Math.min(pagina * tamanho, total);
+  const paginas = pageRange(pagina, totalPaginas);
+  return (
+    <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-[var(--border)] text-sm">
+      <div className="text-[12px] text-[var(--text-muted)] tabular-nums">
+        {inicio}–{fim} de {total}
+      </div>
+      <div className="flex items-center gap-1">
+        <PageBtn
+          disabled={pagina <= 1}
+          onClick={() => onChange(pagina - 1)}
+          label="‹"
+        />
+        {paginas.map((p, i) =>
+          p === "…" ? (
+            <span
+              key={`gap-${i}`}
+              className="px-2 text-[var(--text-muted)] select-none"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onChange(p)}
+              className={`min-w-8 h-8 px-2 rounded-md text-sm tabular-nums transition-colors ${
+                p === pagina
+                  ? "bg-[var(--accent)] text-white"
+                  : "hover:bg-[var(--surface-2)]"
+              }`}
+            >
+              {p}
+            </button>
+          ),
+        )}
+        <PageBtn
+          disabled={pagina >= totalPaginas}
+          onClick={() => onChange(pagina + 1)}
+          label="›"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PageBtn({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="min-w-8 h-8 px-2 rounded-md text-sm hover:bg-[var(--surface-2)] disabled:opacity-30 disabled:hover:bg-transparent"
+    >
+      {label}
+    </button>
+  );
+}
+
+function pageRange(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const set = new Set<number>([1, total, current - 1, current, current + 1]);
+  const sorted = Array.from(set)
+    .filter((n) => n >= 1 && n <= total)
+    .sort((a, b) => a - b);
+  const out: (number | "…")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push("…");
+    out.push(sorted[i]);
+  }
+  return out;
 }
 
 // ============================================================================
@@ -305,6 +431,8 @@ function ProdutoDrawer({
   const [etiquetas, setEtiquetas] = useState<EtiquetaEstoqueRow[]>([]);
   const [loadingCid, setLoadingCid] = useState(true);
   const [loadingEtq, setLoadingEtq] = useState(true);
+  const [errCid, setErrCid] = useState<string | null>(null);
+  const [errEtq, setErrEtq] = useState<string | null>(null);
 
   const cod = produto.CODPROD;
 
@@ -316,10 +444,14 @@ function ProdutoDrawer({
 
   useEffect(() => {
     setLoadingCid(true);
+    setErrCid(null);
     fetch(`/api/estoque/cidades?codprod=${cod}`)
-      .then((r) => r.json())
-      .then((d) => setCidades(d.cidades ?? []))
-      .catch(() => {})
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Erro ao carregar cidades");
+        setCidades(d.cidades ?? []);
+      })
+      .catch((e) => setErrCid(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingCid(false));
 
     const qs = new URLSearchParams({ codprod: String(cod) });
@@ -332,12 +464,16 @@ function ProdutoDrawer({
 
   useEffect(() => {
     setLoadingEtq(true);
+    setErrEtq(null);
     const qs = new URLSearchParams({ codprod: String(cod), lote });
     if (cidade) qs.set("cidade", cidade);
     fetch(`/api/estoque/etiquetas?${qs}`)
-      .then((r) => r.json())
-      .then((d) => setEtiquetas(d.etiquetas ?? []))
-      .catch(() => {})
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Erro ao carregar etiquetas");
+        setEtiquetas(d.etiquetas ?? []);
+      })
+      .catch((e) => setErrEtq(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoadingEtq(false));
   }, [cod, lote, cidade]);
 
@@ -393,7 +529,10 @@ function ProdutoDrawer({
                   {loadingCid && (
                     <tr><td colSpan={4} className="px-3 py-4"><div className="skeleton h-4 w-full" /></td></tr>
                   )}
-                  {!loadingCid && cidades.length === 0 && (
+                  {!loadingCid && errCid && (
+                    <tr><td colSpan={4} className="px-3 py-4 text-center text-rose-300">{errCid}</td></tr>
+                  )}
+                  {!loadingCid && !errCid && cidades.length === 0 && (
                     <tr><td colSpan={4} className="px-3 py-4 text-center text-[var(--text-muted)]">Sem dados.</td></tr>
                   )}
                   {cidades.map((c) => {
@@ -451,7 +590,10 @@ function ProdutoDrawer({
                   {loadingEtq && (
                     <tr><td colSpan={5} className="px-3 py-4"><div className="skeleton h-4 w-full" /></td></tr>
                   )}
-                  {!loadingEtq && etiquetas.length === 0 && (
+                  {!loadingEtq && errEtq && (
+                    <tr><td colSpan={5} className="px-3 py-4 text-center text-rose-300">{errEtq}</td></tr>
+                  )}
+                  {!loadingEtq && !errEtq && etiquetas.length === 0 && (
                     <tr><td colSpan={5} className="px-3 py-4 text-center text-[var(--text-muted)]">Sem etiquetas.</td></tr>
                   )}
                   {etiquetas.map((e) => (
