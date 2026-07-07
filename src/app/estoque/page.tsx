@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   EstoqueProdutoRow,
   EstoqueCidadeRow,
@@ -32,6 +33,150 @@ function mesesClass(m: number) {
   if (m <= 2) return { label: "Baixo", cls: "text-amber-300 bg-amber-500/15 border-amber-500/30" };
   if (m <= 6) return { label: "Saudável", cls: "text-emerald-300 bg-emerald-500/15 border-emerald-500/30" };
   return { label: "Alto", cls: "text-sky-300 bg-sky-500/15 border-sky-500/30" };
+}
+
+// "DD/MM/YYYY" -> número comparável AAAAMMDD (null = 0)
+function dataKey(s: string | null): number {
+  if (!s) return 0;
+  const p = s.split("/");
+  if (p.length !== 3) return 0;
+  return Number(p[2] + p[1] + p[0]) || 0;
+}
+
+// Ordenação da lista
+type SortColKey = "CODPROD" | "ESTOQ_ATUAL" | "VENDA_MEDIA";
+type SortCol = SortColKey | null;
+
+function SortTh({
+  label,
+  col,
+  sortCol,
+  sortDir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  col: SortColKey;
+  sortCol: SortCol;
+  sortDir: "asc" | "desc";
+  onSort: (c: SortColKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sortCol === col;
+  return (
+    <th className={`px-4 py-3 font-medium ${align === "right" ? "text-right" : "text-left"}`}>
+      <button
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 hover:text-[var(--text)] transition-colors ${
+          align === "right" ? "flex-row-reverse" : ""
+        } ${active ? "text-[var(--text)]" : ""}`}
+      >
+        {label}
+        <span className="text-[9px] leading-none opacity-70">
+          {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+// Filtro de status (popover no cabeçalho da coluna)
+const STATUSES = [
+  { label: "Ruptura", m: -1 },
+  { label: "Baixo", m: 1 },
+  { label: "Saudável", m: 4 },
+  { label: "Alto", m: 10 },
+  { label: "Sem giro", m: 20 },
+];
+
+function StatusFilter({
+  sel,
+  onChange,
+}: {
+  sel: Set<string>;
+  onChange: (s: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, left: r.left });
+    }
+    setOpen((o) => !o);
+  };
+  const flip = (label: string) => {
+    const next = new Set(sel);
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    onChange(next);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className={`inline-flex items-center gap-1 hover:text-[var(--text)] transition-colors ${
+          sel.size ? "text-[var(--accent)]" : ""
+        }`}
+      >
+        Status
+        <IconFilter size={12} />
+        {sel.size > 0 && <span className="text-[10px] tabular-nums">({sel.size})</span>}
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
+            <div
+              className="fixed z-50 glass rounded-lg border border-[var(--border)] shadow-xl p-1.5 min-w-[190px] text-[var(--text)]"
+              style={{ top: pos.top, left: pos.left }}
+            >
+              <div className="flex items-center justify-between px-2 py-1">
+                <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
+                  Mostrar status
+                </span>
+                {sel.size > 0 && (
+                  <button
+                    onClick={() => onChange(new Set())}
+                    className="text-[11px] text-[var(--accent)] hover:opacity-80"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+              {STATUSES.map((s) => {
+                const c = mesesClass(s.m);
+                const on = sel.has(s.label);
+                return (
+                  <button
+                    key={s.label}
+                    onClick={() => flip(s.label)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--surface-2)] text-sm"
+                  >
+                    <span
+                      className={`size-3.5 rounded border flex items-center justify-center shrink-0 ${
+                        on ? "bg-[var(--accent)] border-[var(--accent)]" : "border-[var(--border)]"
+                      }`}
+                    >
+                      {on && <span className="text-[10px] leading-none text-white">✓</span>}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-[11px] border ${c.cls}`}>
+                      {s.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
+  );
 }
 
 function KpiCard({
@@ -69,6 +214,19 @@ export default function EstoquePage() {
   // filtros da lista (cidade NÃO é filtro aqui — é dimensão de drill no detalhe)
   const [secao, setSecao] = useState("");
   const [busca, setBusca] = useState("");
+
+  // ordenação + filtro de status
+  const [sortCol, setSortCol] = useState<SortCol>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [statusSel, setStatusSel] = useState<Set<string>>(() => new Set());
+
+  const toggleSort = (col: SortColKey) => {
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
 
   // paginação
   const [pagina, setPagina] = useState(1);
@@ -108,27 +266,42 @@ export default function EstoquePage() {
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return produtos;
-    return produtos.filter(
-      (p) =>
-        String(p.CODPROD).includes(q) ||
-        (p.DESCRICAO ?? "").toLowerCase().includes(q),
+    return produtos.filter((p) => {
+      if (
+        q &&
+        !(
+          String(p.CODPROD).includes(q) ||
+          (p.DESCRICAO ?? "").toLowerCase().includes(q)
+        )
+      )
+        return false;
+      if (statusSel.size && !statusSel.has(mesesClass(p.MESES_ESTQ).label))
+        return false;
+      return true;
+    });
+  }, [produtos, busca, statusSel]);
+
+  const ordenados = useMemo(() => {
+    if (!sortCol) return filtrados;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtrados].sort(
+      (a, b) => ((a[sortCol] ?? 0) - (b[sortCol] ?? 0)) * dir,
     );
-  }, [produtos, busca]);
+  }, [filtrados, sortCol, sortDir]);
 
   useEffect(() => {
     setPagina(1);
-  }, [secao, busca]);
+  }, [secao, busca, statusSel]);
 
-  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / TAMANHO_PAGINA));
+  const totalPaginas = Math.max(1, Math.ceil(ordenados.length / TAMANHO_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const paginados = useMemo(
     () =>
-      filtrados.slice(
+      ordenados.slice(
         (paginaAtual - 1) * TAMANHO_PAGINA,
         paginaAtual * TAMANHO_PAGINA,
       ),
-    [filtrados, paginaAtual],
+    [ordenados, paginaAtual],
   );
 
   const kpis = useMemo(() => {
@@ -223,12 +396,14 @@ export default function EstoquePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-[var(--text-muted)] border-b border-[var(--border)]">
-                  <th className="px-4 py-3 font-medium">Código</th>
+                  <SortTh label="Código" col="CODPROD" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-4 py-3 font-medium">Produto</th>
-                  <th className="px-4 py-3 font-medium text-right">Estoque</th>
-                  <th className="px-4 py-3 font-medium text-right">Venda média</th>
+                  <SortTh label="Estoque" col="ESTOQ_ATUAL" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <SortTh label="Venda média" col="VENDA_MEDIA" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <th className="px-4 py-3 font-medium text-right">Meses estq.</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">
+                    <StatusFilter sel={statusSel} onChange={setStatusSel} />
+                  </th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -473,7 +648,7 @@ function ProdutoDetalhe({
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <aside className="relative anim-slide w-full max-w-5xl h-full bg-[var(--surface-solid)] border-l border-[var(--border)] flex flex-col">
+      <aside className="relative anim-slide w-full max-w-5xl h-full glass border-l border-[var(--border)] flex flex-col">
         {/* Cabeçalho */}
         <div className="glass border-b border-[var(--border)] px-5 py-4 flex items-start gap-4 shrink-0">
           <div className="flex-1 min-w-0">
@@ -623,6 +798,8 @@ function CidadeItem({
   );
 }
 
+type EtqSortKey = "CODBARID" | "METROS" | "DATA";
+
 function LoteCard({
   grupo,
   aberto,
@@ -634,6 +811,30 @@ function LoteCard({
   mostrarCidade: boolean;
   onToggle: () => void;
 }) {
+  const [sc, setSc] = useState<EtqSortKey | null>(null);
+  const [sd, setSd] = useState<"asc" | "desc">("asc");
+
+  const sort = (c: EtqSortKey) => {
+    if (sc === c) setSd((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSc(c);
+      setSd("asc");
+    }
+  };
+
+  const itens = useMemo(() => {
+    if (!sc) return grupo.itens;
+    const dir = sd === "asc" ? 1 : -1;
+    return [...grupo.itens].sort((a, b) => {
+      const av = sc === "DATA" ? dataKey(a.DATA) : a[sc] ?? 0;
+      const bv = sc === "DATA" ? dataKey(b.DATA) : b[sc] ?? 0;
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [grupo.itens, sc, sd]);
+
+  const ind = (c: EtqSortKey) => (sc === c ? (sd === "asc" ? "▲" : "▼") : "↕");
+  const thBtn = "inline-flex items-center gap-1 hover:text-[var(--text)] transition-colors";
+
   return (
     <div className="glass rounded-lg overflow-hidden">
       <button
@@ -661,14 +862,26 @@ function LoteCard({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] text-[var(--text-muted)] border-b border-[var(--border)]">
-                <th className="px-3 py-2 font-medium">Cód. barras</th>
-                <th className="px-3 py-2 font-medium text-right">Metros</th>
+                <th className="px-3 py-2 font-medium">
+                  <button onClick={() => sort("CODBARID")} className={thBtn}>
+                    Cód. barras <span className="text-[9px] opacity-70">{ind("CODBARID")}</span>
+                  </button>
+                </th>
+                <th className="px-3 py-2 font-medium text-right">
+                  <button onClick={() => sort("METROS")} className={`${thBtn} flex-row-reverse`}>
+                    Metros <span className="text-[9px] opacity-70">{ind("METROS")}</span>
+                  </button>
+                </th>
                 {mostrarCidade && <th className="px-3 py-2 font-medium">Cidade</th>}
-                <th className="px-3 py-2 font-medium">Data</th>
+                <th className="px-3 py-2 font-medium">
+                  <button onClick={() => sort("DATA")} className={thBtn}>
+                    Data <span className="text-[9px] opacity-70">{ind("DATA")}</span>
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {grupo.itens.map((e) => (
+              {itens.map((e) => (
                 <tr key={e.CODBARID} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-3 py-2 font-mono text-xs">{e.CODBARID}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{nf(e.METROS, 2)}</td>
