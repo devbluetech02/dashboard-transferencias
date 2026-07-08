@@ -17,8 +17,8 @@ export interface Item {
   NOME_PRODUTO: string | null;
   QUANTIDADE: number;
   SUGESTAO: number | null;
-  DATA: string | null;
-  POSICAO: string | null;
+  DATA_ITEM: string | null;
+  ITEM_POSICAO: string | null;
   QTCOLETADA: number | null;
 }
 
