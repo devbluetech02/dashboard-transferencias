@@ -848,7 +848,7 @@ function CidadeItem({
       >
         <div className="flex-1 min-w-0 text-sm truncate">{nome}</div>
         <span className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap">
-          {nf(estoque)} m
+          {estoque.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} m
         </span>
         {k && (
           <span className={`px-1.5 py-0.5 rounded text-[10px] border tabular-nums whitespace-nowrap ${k.cls}`}>

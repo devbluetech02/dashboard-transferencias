@@ -2,6 +2,12 @@
   "name": "dashboard-transferencias",
   "version": "0.1.0",
   "private": true,
+  "browserslist": [
+    "chrome >= 90",
+    "safari >= 15",
+    "firefox >= 103",
+    "edge >= 90"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
