@@ -125,6 +125,7 @@ export default function Page() {
 
   const [selecionada, setSelecionada] = useState<Transferencia | null>(null);
   const [voltarParaItens, setVoltarParaItens] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
   const [itens, setItens] = useState<Item[] | null>(null);
   const [itensLoading, setItensLoading] = useState(false);
   const [itemExpandido, setItemExpandido] = useState<number | null>(null);
@@ -358,6 +359,15 @@ export default function Page() {
     } finally {
       setEtiquetasLoading(false);
     }
+  }
+
+  function fecharDrawer() {
+    setDrawerClosing(true);
+    window.setTimeout(() => {
+      setSelecionada(null);
+      setVoltarParaItens(false);
+      setDrawerClosing(false);
+    }, 220);
   }
 
   const filtersActive =
@@ -1028,13 +1038,10 @@ export default function Page() {
       {selecionada && (
         <>
           <div
-            onClick={() => {
-              setSelecionada(null);
-              setVoltarParaItens(false);
-            }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 anim-fade"
+            onClick={fecharDrawer}
+            className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-30 ${drawerClosing ? "anim-fade-out" : "anim-fade"}`}
           />
-          <aside className="fixed right-0 top-0 h-screen w-full md:w-[640px] glass border-l border-[var(--border)] z-40 shadow-2xl anim-slide flex flex-col">
+          <aside className={`fixed right-0 top-0 h-screen w-full md:w-[640px] glass border-l border-[var(--border)] z-40 shadow-2xl flex flex-col ${drawerClosing ? "anim-slide-out" : "anim-slide"}`}>
             {voltarParaItens && (
               <button
                 onClick={() => {
@@ -1072,10 +1079,7 @@ export default function Page() {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  setSelecionada(null);
-                  setVoltarParaItens(false);
-                }}
+                onClick={fecharDrawer}
                 className="size-8 rounded-md hover:bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-muted)]"
                 aria-label="Fechar"
               >

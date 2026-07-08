@@ -6,7 +6,6 @@ import type {
   EstoqueProdutoRow,
   EstoqueCidadeRow,
   EtiquetaEstoqueRow,
-  SecaoOption,
 } from "@/lib/estoque";
 import {
   IconLayers,
@@ -19,12 +18,24 @@ import {
   IconActivity,
   IconChart,
 } from "@/components/icons";
+import BorderGlow from "@/components/BorderGlow";
 
 const nf = (n: number, dec = 0) =>
   (n ?? 0).toLocaleString("pt-BR", {
     minimumFractionDigits: dec,
     maximumFractionDigits: dec,
   });
+
+// Ordem + metadados das faixas de cobertura (espelha mesesClass)
+const STATUS_ESTOQUE = [
+  { label: "Ruptura", color: "#f43f5e", glow: { hsl: "350 89 60", colors: ["#fb7185", "#f43f5e", "#fda4af"] }, accent: "from-rose-500 to-rose-700" },
+  { label: "Baixo", color: "#f59e0b", glow: { hsl: "38 92 55", colors: ["#fbbf24", "#f59e0b", "#fde68a"] }, accent: "from-amber-500 to-amber-700" },
+  { label: "Saudável", color: "#10b981", glow: { hsl: "160 84 45", colors: ["#34d399", "#10b981", "#6ee7b7"] }, accent: "from-emerald-500 to-emerald-700" },
+  { label: "Alto", color: "#0ea5e9", glow: { hsl: "199 89 55", colors: ["#38bdf8", "#0ea5e9", "#7dd3fc"] }, accent: "from-sky-500 to-sky-700" },
+  { label: "Sem giro", color: "#8b5cf6", glow: { hsl: "262 83 60", colors: ["#a78bfa", "#8b5cf6", "#c4b5fd"] }, accent: "from-violet-500 to-violet-700" },
+] as const;
+
+const GLOW_TOTAL = { hsl: "240 5 60", colors: ["#a1a1aa", "#d4d4d8", "#71717a"] };
 
 // Classificação de cobertura (meses de estoque)
 function mesesClass(m: number) {
@@ -182,37 +193,63 @@ function StatusFilter({
 function KpiCard({
   label,
   value,
-  sub,
   icon,
+  accent,
+  active,
+  onClick,
+  hint,
+  glow,
 }: {
   label: string;
   value: string;
-  sub?: string;
   icon: React.ReactNode;
+  accent: string;
+  active?: boolean;
+  onClick?: () => void;
+  hint?: string;
+  glow: { hsl: string; colors: readonly string[] };
 }) {
   return (
-    <div className="glass rounded-xl px-4 py-3.5 flex items-center gap-3">
-      <div className="size-9 rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center shrink-0">
-        {icon}
+    <BorderGlow
+      onClick={onClick}
+      backgroundColor="var(--surface-solid)"
+      borderRadius={14}
+      glowRadius={32}
+      glowColor={glow.hsl}
+      colors={glow.colors as string[]}
+      coneSpread={25}
+      edgeSensitivity={28}
+      glowIntensity={active ? 1.4 : 1.0}
+      animated={active}
+      className={active ? "!border-[var(--accent)] ring-1 ring-[var(--accent)]/40" : ""}
+    >
+      <div className="p-4 w-full">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-medium">
+            {label}
+          </span>
+          <div
+            className={`size-7 rounded-md bg-gradient-to-br ${accent} text-white flex items-center justify-center shadow-sm`}
+          >
+            {icon}
+          </div>
+        </div>
+        <div className="text-3xl font-semibold tabular-nums tracking-tight">{value}</div>
+        <div className="mt-1 text-[11px] uppercase tracking-wider text-[var(--text-muted)] min-h-[14px]">
+          {active ? "✓ filtro ativo" : hint ?? "clique p/ filtrar"}
+        </div>
       </div>
-      <div className="min-w-0">
-        <div className="text-xs text-[var(--text-muted)] truncate">{label}</div>
-        <div className="text-lg font-semibold tracking-tight">{value}</div>
-        {sub && <div className="text-[11px] text-[var(--text-muted)]">{sub}</div>}
-      </div>
-    </div>
+    </BorderGlow>
   );
 }
 
 export default function EstoquePage() {
   const [produtos, setProdutos] = useState<EstoqueProdutoRow[]>([]);
-  const [secoes, setSecoes] = useState<SecaoOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
 
   // filtros da lista (cidade NÃO é filtro aqui — é dimensão de drill no detalhe)
-  const [secao, setSecao] = useState("");
   const [busca, setBusca] = useState("");
 
   // ordenação + filtro de status
@@ -239,9 +276,7 @@ export default function EstoquePage() {
     setLoading(true);
     setErr(null);
     try {
-      const qs = new URLSearchParams();
-      if (secao) qs.set("secao", secao);
-      const r = await fetch(`/api/estoque?${qs}`, { cache: "no-store" });
+      const r = await fetch(`/api/estoque`, { cache: "no-store" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Erro ao carregar");
       setProdutos(data.produtos ?? []);
@@ -251,18 +286,11 @@ export default function EstoquePage() {
     } finally {
       setLoading(false);
     }
-  }, [secao]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    fetch("/api/estoque/secoes")
-      .then((r) => r.json())
-      .then((d) => setSecoes(d.secoes ?? []))
-      .catch(() => {});
-  }, []);
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -291,7 +319,7 @@ export default function EstoquePage() {
 
   useEffect(() => {
     setPagina(1);
-  }, [secao, busca, statusSel]);
+  }, [busca, statusSel]);
 
   const totalPaginas = Math.max(1, Math.ceil(ordenados.length / TAMANHO_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -304,12 +332,28 @@ export default function EstoquePage() {
     [ordenados, paginaAtual],
   );
 
-  const kpis = useMemo(() => {
-    const estoqueTotal = produtos.reduce((s, p) => s + (p.ESTOQ_ATUAL || 0), 0);
-    const ruptura = produtos.filter((p) => p.MESES_ESTQ <= 0).length;
-    const semGiro = produtos.filter((p) => p.MESES_ESTQ >= 15).length;
-    return { total: produtos.length, estoqueTotal, ruptura, semGiro };
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {
+      Ruptura: 0,
+      Baixo: 0,
+      Saudável: 0,
+      Alto: 0,
+      "Sem giro": 0,
+    };
+    for (const p of produtos) {
+      const l = mesesClass(p.MESES_ESTQ).label;
+      m[l] = (m[l] ?? 0) + 1;
+    }
+    return m;
   }, [produtos]);
+
+  const toggleStatus = (label: string) =>
+    setStatusSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
 
   return (
     <div className="min-h-screen text-[var(--text)]">
@@ -330,31 +374,20 @@ export default function EstoquePage() {
             </p>
           </div>
 
-          {/* Seção */}
-          <select
-            value={secao}
-            onChange={(e) => setSecao(e.target.value)}
-            className="px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text)] focus:border-[var(--accent)] outline-none [color-scheme:dark] cursor-pointer"
-          >
-            <option value="">Todas as seções</option>
-            {secoes.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-
           {/* Busca local */}
-          <div className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm w-56 focus-within:border-[var(--accent)] transition">
+          <div className="flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-sm text-[var(--text-muted)] w-72 focus-within:border-[var(--accent)] transition">
             <IconSearch size={15} />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Filtrar (código/descrição)…"
-              className="bg-transparent flex-1 outline-none placeholder:text-[var(--text-muted)]"
+              className="bg-transparent flex-1 outline-none text-[var(--text)] placeholder:text-[var(--text-muted)]"
             />
             {busca && (
-              <button onClick={() => setBusca("")} className="text-[var(--text-muted)] hover:text-[var(--text)]">
+              <button
+                onClick={() => setBusca("")}
+                className="shrink-0 text-[var(--text-muted)] hover:text-[var(--text)]"
+              >
                 <IconX size={14} />
               </button>
             )}
@@ -382,12 +415,32 @@ export default function EstoquePage() {
           </div>
         )}
 
-        {/* KPIs */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Produtos" value={nf(kpis.total)} icon={<IconLayers size={18} />} />
-          <KpiCard label="Estoque total (metros)" value={nf(kpis.estoqueTotal)} icon={<IconChart size={18} />} />
-          <KpiCard label="Em ruptura" value={nf(kpis.ruptura)} sub="meses ≤ 0" icon={<IconActivity size={18} />} />
-          <KpiCard label="Sem giro" value={nf(kpis.semGiro)} sub="≥ 15 meses" icon={<IconFilter size={18} />} />
+        {/* KPIs (clique = filtro) */}
+        <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <KpiCard
+            label="Produtos"
+            value={nf(produtos.length)}
+            icon={<IconLayers size={16} />}
+            accent="from-zinc-600 to-zinc-800"
+            glow={GLOW_TOTAL}
+            active={statusSel.size === 0}
+            onClick={() => setStatusSel(new Set())}
+            hint={statusSel.size === 0 ? "todos" : "limpar filtros"}
+          />
+          {STATUS_ESTOQUE.map((s, i) => (
+            <KpiCard
+              key={s.label}
+              label={s.label}
+              value={nf(counts[s.label] ?? 0)}
+              icon={
+                [<IconActivity key="a" size={16} />, <IconFilter key="b" size={16} />, <IconChart key="c" size={16} />, <IconChart key="d" size={16} />, <IconBarcode key="e" size={16} />][i]
+              }
+              accent={s.accent}
+              glow={s.glow}
+              active={statusSel.has(s.label)}
+              onClick={() => toggleStatus(s.label)}
+            />
+          ))}
         </section>
 
         {/* Tabela principal */}
@@ -582,12 +635,18 @@ function ProdutoDetalhe({
   // "" = todas as cidades
   const [cidadeSel, setCidadeSel] = useState("");
   const [loteAberto, setLoteAberto] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  const requestClose = useCallback(() => {
+    setClosing(true);
+    window.setTimeout(onClose, 220);
+  }, [onClose]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && requestClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   // Cidades: números de venda/meses por cidade (endpoint dedicado)
   useEffect(() => {
@@ -647,8 +706,11 @@ function ProdutoDetalhe({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <aside className="relative anim-slide w-full max-w-5xl h-full glass border-l border-[var(--border)] flex flex-col">
+      <div
+        className={`absolute inset-0 bg-black/50 backdrop-blur-sm ${closing ? "anim-fade-out" : "anim-fade"}`}
+        onClick={requestClose}
+      />
+      <aside className={`relative w-full max-w-5xl h-full glass border-l border-[var(--border)] flex flex-col ${closing ? "anim-slide-out" : "anim-slide"}`}>
         {/* Cabeçalho */}
         <div className="glass border-b border-[var(--border)] px-5 py-4 flex items-start gap-4 shrink-0">
           <div className="flex-1 min-w-0">
@@ -669,13 +731,13 @@ function ProdutoDetalhe({
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text)] p-1">
+          <button onClick={requestClose} className="text-[var(--text-muted)] hover:text-[var(--text)] p-1">
             <IconX size={18} />
           </button>
         </div>
 
         {/* Master-detail */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-[240px_1fr] min-h-0">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-[300px_1fr] min-h-0">
           {/* Coluna: cidades */}
           <div className="border-b md:border-b-0 md:border-r border-[var(--border)] overflow-y-auto">
             <div className="px-4 py-2.5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-2 sticky top-0 bg-[var(--surface-solid)] z-10">
@@ -729,7 +791,7 @@ function ProdutoDetalhe({
               </div>
             </div>
 
-            <div className="p-4 space-y-2">
+            <div key={cidadeSel} className="p-4 space-y-2 anim-fade">
               {loadingEtq &&
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="skeleton h-12 w-full" />
@@ -784,13 +846,13 @@ function CidadeItem({
             : "border-transparent hover:bg-[var(--surface-2)]"
         }`}
       >
-        <div className="flex-1 min-w-0">
-          <div className="text-sm truncate">{nome}</div>
-          <div className="text-[11px] text-[var(--text-muted)] tabular-nums">{nf(estoque)} m</div>
-        </div>
+        <div className="flex-1 min-w-0 text-sm truncate">{nome}</div>
+        <span className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap">
+          {nf(estoque)} m
+        </span>
         {k && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] border ${k.cls}`}>
-            {nf(meses ?? 0, 1)}
+          <span className={`px-1.5 py-0.5 rounded text-[10px] border tabular-nums whitespace-nowrap ${k.cls}`}>
+            {nf(meses ?? 0, 1)} {(meses ?? 0) === 1 ? "mês" : "meses"}
           </span>
         )}
       </button>
@@ -857,7 +919,12 @@ function LoteCard({
         </div>
       </button>
 
-      {aberto && (
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          aberto ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="min-h-0 overflow-hidden">
         <div className="border-t border-[var(--border)] overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -892,7 +959,8 @@ function LoteCard({
             </tbody>
           </table>
         </div>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
