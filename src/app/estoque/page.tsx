@@ -19,12 +19,32 @@ import {
   IconChart,
 } from "@/components/icons";
 import BorderGlow from "@/components/BorderGlow";
+import { Donut } from "@/components/Donut";
 
 const nf = (n: number, dec = 0) =>
   (n ?? 0).toLocaleString("pt-BR", {
     minimumFractionDigits: dec,
     maximumFractionDigits: dec,
   });
+
+// "DD/MM/YYYY" -> dias desde a data (null se inválida)
+function diasDesde(br: string | null | undefined): number | null {
+  if (!br) return null;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(br.trim());
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (Number.isNaN(d.getTime())) return null;
+  const ms = Date.now() - d.getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+function fmtDias(d: number | null): string {
+  if (d == null) return "—";
+  if (d === 0) return "hoje";
+  if (d < 30) return `${d}d`;
+  if (d < 365) return `${Math.floor(d / 30)}m`;
+  return `${(d / 365).toFixed(1)}a`;
+}
 
 // Ordem + metadados das faixas de cobertura (espelha mesesClass)
 const STATUS_ESTOQUE = [
@@ -243,6 +263,36 @@ function KpiCard({
   );
 }
 
+function ResumoStat({
+  label,
+  value,
+  unit,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  accent: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className={`size-2 rounded-full bg-gradient-to-br ${accent}`} />
+        <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] truncate">
+          {label}
+        </span>
+      </div>
+      <div className="text-xl font-semibold tabular-nums tracking-tight">
+        {value}
+        {unit && <span className="text-sm font-normal text-[var(--text-muted)]"> {unit}</span>}
+      </div>
+      {sub && <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
 export default function EstoquePage() {
   const [produtos, setProdutos] = useState<EstoqueProdutoRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -355,6 +405,31 @@ export default function EstoquePage() {
       return next;
     });
 
+  const estoqueTotal = useMemo(
+    () => produtos.reduce((s, p) => s + (p.ESTOQ_ATUAL || 0), 0),
+    [produtos],
+  );
+
+  // Ruptura: meses <= 0, priorizado por venda média (maior giro = mais urgente)
+  const rupturas = useMemo(
+    () =>
+      produtos
+        .filter((p) => p.MESES_ESTQ <= 0)
+        .sort((a, b) => b.VENDA_MEDIA - a.VENDA_MEDIA),
+    [produtos],
+  );
+
+  const distData = useMemo(
+    () =>
+      STATUS_ESTOQUE.map((s) => ({
+        key: s.label,
+        label: s.label,
+        value: counts[s.label] ?? 0,
+        color: s.color,
+      })).filter((d) => d.value > 0),
+    [counts],
+  );
+
   return (
     <div className="min-h-screen text-[var(--text)]">
       {/* Topbar */}
@@ -442,6 +517,120 @@ export default function EstoquePage() {
             />
           ))}
         </section>
+
+        {/* Distribuição + resumo */}
+        <section className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="glass rounded-xl p-4 md:p-5 lg:col-span-2">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="size-7 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center">
+                <IconChart size={15} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight">Distribuição por cobertura</h2>
+                <p className="text-xs text-[var(--text-muted)]">Produtos por faixa de meses</p>
+              </div>
+            </div>
+            {distData.length ? (
+              <Donut data={distData} centerValue={nf(produtos.length)} centerLabel="produtos" />
+            ) : (
+              <div className="skeleton h-[180px] w-full" />
+            )}
+          </div>
+
+          <div className="glass rounded-xl p-4 md:p-5 lg:col-span-3 flex flex-col">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="size-7 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center">
+                <IconLayers size={15} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight">Resumo</h2>
+                <p className="text-xs text-[var(--text-muted)]">Visão geral do estoque</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 flex-1">
+              <ResumoStat
+                label="Estoque total"
+                value={nf(estoqueTotal, 2)}
+                unit="m"
+                accent="from-indigo-500 to-violet-600"
+              />
+              <ResumoStat
+                label="Produtos"
+                value={nf(produtos.length)}
+                accent="from-zinc-600 to-zinc-800"
+              />
+              <ResumoStat
+                label="Em ruptura"
+                value={nf(counts["Ruptura"] ?? 0)}
+                sub="meses ≤ 0"
+                accent="from-rose-500 to-rose-700"
+              />
+              <ResumoStat
+                label="Baixo giro"
+                value={nf(counts["Baixo"] ?? 0)}
+                sub="≤ 2 meses"
+                accent="from-amber-500 to-amber-700"
+              />
+              <ResumoStat
+                label="Saudável"
+                value={nf(counts["Saudável"] ?? 0)}
+                sub="2–6 meses"
+                accent="from-emerald-500 to-emerald-700"
+              />
+              <ResumoStat
+                label="Sem giro"
+                value={nf(counts["Sem giro"] ?? 0)}
+                sub="≥ 15 meses"
+                accent="from-violet-500 to-violet-700"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Alerta de ruptura */}
+        {rupturas.length > 0 && (
+          <section className="glass rounded-xl overflow-hidden border border-rose-500/30">
+            <div className="px-4 md:px-5 py-3.5 flex items-center justify-between gap-3 border-b border-rose-500/20 bg-rose-500/5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="size-7 rounded-md bg-rose-500/15 text-rose-300 flex items-center justify-center shrink-0">
+                  <IconActivity size={15} />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold tracking-tight text-rose-200">
+                    Ruptura — reposição prioritária
+                  </h2>
+                  <p className="text-xs text-rose-300/70">
+                    {nf(rupturas.length)} produto{rupturas.length === 1 ? "" : "s"} sem cobertura · ordenado por venda média
+                  </p>
+                </div>
+              </div>
+              {rupturas.length > 6 && (
+                <span className="text-[11px] text-rose-300/70 shrink-0">top 6</span>
+              )}
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+              {rupturas.slice(0, 6).map((p) => (
+                <button
+                  key={p.CODPROD}
+                  onClick={() => setSel(p)}
+                  className="w-full px-4 md:px-5 py-2.5 flex items-center gap-3 text-left hover:bg-[var(--surface-2)] transition-colors"
+                >
+                  <span className="font-mono text-xs text-[var(--text-muted)] w-14 shrink-0">
+                    {p.CODPROD}
+                  </span>
+                  <span className="flex-1 min-w-0 text-sm truncate">{p.DESCRICAO}</span>
+                  <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0 hidden sm:block">
+                    v. média <b className="text-[var(--text)]">{nf(p.VENDA_MEDIA)}</b>
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] border text-rose-300 bg-rose-500/15 border-rose-500/30 tabular-nums shrink-0">
+                    {nf(p.ESTOQ_ATUAL, 2)} m
+                  </span>
+                  <IconArrowRight size={14} className="text-[var(--text-muted)] shrink-0" />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Tabela principal */}
         <section className="glass rounded-xl overflow-hidden">
@@ -636,6 +825,7 @@ function ProdutoDetalhe({
   const [cidadeSel, setCidadeSel] = useState("");
   const [loteAberto, setLoteAberto] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
+  const [sugAberta, setSugAberta] = useState(true);
 
   const requestClose = useCallback(() => {
     setClosing(true);
@@ -704,6 +894,41 @@ function ProdutoDetalhe({
   const totalEtq = lotes.reduce((s, l) => s + l.itens.length, 0);
   const status = mesesClass(produto.MESES_ESTQ);
 
+  // Sugestão de transferência: mover excedente de cidades com sobra p/ cidades
+  // em ruptura/baixo giro. Alvo = 2 meses de cobertura. Alocação gulosa.
+  const sugestoes = useMemo(() => {
+    const TARGET = 2;
+    const pool = cidades
+      .map((c) => ({
+        cidade: c.CIDADE,
+        left: (c.ESTOQ_ATUAL || 0) - (c.VENDA_MEDIA || 0) * TARGET,
+        meses: c.MESES_ESTQ,
+      }))
+      .filter((c) => c.left > 0 && c.meses >= 6)
+      .sort((a, b) => b.left - a.left);
+    const destinos = cidades
+      .map((c) => ({
+        cidade: c.CIDADE,
+        need: (c.VENDA_MEDIA || 0) * TARGET - (c.ESTOQ_ATUAL || 0),
+        meses: c.MESES_ESTQ,
+      }))
+      .filter((c) => c.need > 0 && c.meses <= 2)
+      .sort((a, b) => a.meses - b.meses);
+    const out: { origem: string; destino: string; metros: number }[] = [];
+    for (const d of destinos) {
+      let need = d.need;
+      for (const o of pool) {
+        if (need <= 0.5) break;
+        if (o.left <= 0.5 || o.cidade === d.cidade) continue;
+        const mv = Math.min(o.left, need);
+        out.push({ origem: o.cidade, destino: d.cidade, metros: mv });
+        o.left -= mv;
+        need -= mv;
+      }
+    }
+    return out.sort((a, b) => b.metros - a.metros).slice(0, 8);
+  }, [cidades]);
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div
@@ -735,6 +960,52 @@ function ProdutoDetalhe({
             <IconX size={18} />
           </button>
         </div>
+
+        {/* Sugestão de transferência */}
+        {sugestoes.length > 0 && (
+          <div className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 shrink-0">
+            <button
+              onClick={() => setSugAberta((v) => !v)}
+              className="w-full px-5 py-2.5 flex items-center gap-2.5 text-left hover:bg-[var(--accent-soft)]/60 transition-colors"
+            >
+              <span className="size-6 rounded-md bg-[var(--accent)]/20 text-[var(--accent)] flex items-center justify-center shrink-0">
+                <IconArrowRight size={13} />
+              </span>
+              <span className="flex-1 min-w-0 text-sm font-medium">
+                Sugestões de transferência
+                <span className="text-[var(--text-muted)] font-normal">
+                  {" "}· {sugestoes.length} movimento{sugestoes.length === 1 ? "" : "s"} p/ cobrir ruptura
+                </span>
+              </span>
+              <span className={`text-[var(--text-muted)] transition-transform ${sugAberta ? "rotate-90" : ""}`}>
+                <IconArrowRight size={14} />
+              </span>
+            </button>
+            <div
+              className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+                sugAberta ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+              }`}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="px-5 pb-3 flex flex-wrap gap-2">
+                  {sugestoes.map((s, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-solid)]/60 px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{s.origem}</span>
+                      <IconArrowRight size={13} className="text-[var(--accent)]" />
+                      <span className="font-medium">{s.destino}</span>
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] tabular-nums bg-[var(--accent)]/15 text-[var(--accent)] whitespace-nowrap">
+                        {nf(s.metros, 1)} m
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Master-detail */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-[300px_1fr] min-h-0">
@@ -897,6 +1168,22 @@ function LoteCard({
   const ind = (c: EtqSortKey) => (sc === c ? (sd === "asc" ? "▲" : "▼") : "↕");
   const thBtn = "inline-flex items-center gap-1 hover:text-[var(--text)] transition-colors";
 
+  // Idade do estoque no lote = etiqueta mais antiga (maior nº de dias)
+  const idade = useMemo(() => {
+    const ds = grupo.itens
+      .map((i) => diasDesde(i.DATA))
+      .filter((x): x is number => x != null);
+    return ds.length ? Math.max(...ds) : null;
+  }, [grupo.itens]);
+  const idadeCls =
+    idade == null
+      ? "text-[var(--text-muted)] bg-[var(--surface-2)] border-[var(--border)]"
+      : idade >= 180
+        ? "text-rose-300 bg-rose-500/15 border-rose-500/30"
+        : idade >= 90
+          ? "text-amber-300 bg-amber-500/15 border-amber-500/30"
+          : "text-[var(--text-muted)] bg-[var(--surface-2)] border-[var(--border)]";
+
   return (
     <div className="glass rounded-lg overflow-hidden">
       <button
@@ -914,6 +1201,14 @@ function LoteCard({
             {nf(grupo.itens.length)} etiqueta{grupo.itens.length === 1 ? "" : "s"}
           </div>
         </div>
+        {idade != null && (
+          <span
+            title={`Etiqueta mais antiga: ${idade} dia${idade === 1 ? "" : "s"}`}
+            className={`px-1.5 py-0.5 rounded text-[10px] border tabular-nums whitespace-nowrap shrink-0 ${idadeCls}`}
+          >
+            parado há {fmtDias(idade)}
+          </span>
+        )}
         <div className="text-right shrink-0">
           <div className="text-sm font-semibold tabular-nums">{nf(grupo.metros, 2)} m</div>
         </div>
@@ -953,7 +1248,14 @@ function LoteCard({
                   <td className="px-3 py-2 font-mono text-xs">{e.CODBARID}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{nf(e.METROS, 2)}</td>
                   {mostrarCidade && <td className="px-3 py-2">{e.FILIAL}</td>}
-                  <td className="px-3 py-2 text-[var(--text-muted)]">{e.DATA}</td>
+                  <td className="px-3 py-2 text-[var(--text-muted)] whitespace-nowrap">
+                    {e.DATA}
+                    {diasDesde(e.DATA) != null && (
+                      <span className="ml-1.5 text-[10px] opacity-70">
+                        ({fmtDias(diasDesde(e.DATA))})
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
