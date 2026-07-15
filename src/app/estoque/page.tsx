@@ -935,7 +935,7 @@ function ProdutoDetalhe({
         className={`absolute inset-0 bg-black/50 backdrop-blur-sm ${closing ? "anim-fade-out" : "anim-fade"}`}
         onClick={requestClose}
       />
-      <aside className={`relative w-full max-w-5xl h-full glass border-l border-[var(--border)] flex flex-col ${closing ? "anim-slide-out" : "anim-slide"}`}>
+      <aside className={`relative w-full max-w-6xl h-full glass border-l border-[var(--border)] flex flex-col ${closing ? "anim-slide-out" : "anim-slide"}`}>
         {/* Cabeçalho */}
         <div className="glass border-b border-[var(--border)] px-5 py-4 flex items-start gap-4 shrink-0">
           <div className="flex-1 min-w-0">
@@ -1008,7 +1008,7 @@ function ProdutoDetalhe({
         )}
 
         {/* Master-detail */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-[300px_1fr] min-h-0">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-[440px_1fr] min-h-0">
           {/* Coluna: cidades */}
           <div className="border-b md:border-b-0 md:border-r border-[var(--border)] overflow-y-auto">
             <div className="px-4 py-2.5 text-[11px] uppercase tracking-wide text-[var(--text-muted)] flex items-center gap-2 sticky top-0 bg-[var(--surface-solid)] z-10">
@@ -1027,30 +1027,48 @@ function ProdutoDetalhe({
             )}
 
             {!loadingCid && !errCid && (
-              <ul className="pb-2">
-                <CidadeItem
-                  nome="Todas as cidades"
-                  estoque={produto.ESTOQ_ATUAL}
-                  venda={produto.VENDA_MEDIA}
-                  meses={produto.MESES_ESTQ}
-                  ativa={cidadeSel === ""}
-                  onClick={() => setCidadeSel("")}
-                />
-                {cidades.map((c) => (
-                  <CidadeItem
-                    key={c.CIDADE}
-                    nome={c.CIDADE}
-                    estoque={c.ESTOQ_ATUAL}
-                    venda={c.VENDA_MEDIA}
-                    meses={c.MESES_ESTQ}
-                    ativa={cidadeSel.toUpperCase() === (c.CIDADE ?? "").toUpperCase()}
-                    onClick={() => setCidadeSel(c.CIDADE ?? "")}
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-[var(--text-muted)] border-b border-[var(--border)]">
+                    <th className="px-4 py-2 font-medium text-left">Cidade</th>
+                    <th className="px-2 py-2 font-medium text-right whitespace-nowrap">
+                      V. média<span className="block normal-case tracking-normal text-[10px]">m/mês</span>
+                    </th>
+                    <th className="px-2 py-2 font-medium text-right whitespace-nowrap">
+                      Estoque<span className="block normal-case tracking-normal text-[10px]">m</span>
+                    </th>
+                    <th className="px-4 py-2 font-medium text-right whitespace-nowrap">Meses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <CidadeRow
+                    nome="Todas as cidades"
+                    estoque={produto.ESTOQ_ATUAL}
+                    venda={produto.VENDA_MEDIA}
+                    meses={produto.MESES_ESTQ}
+                    ativa={cidadeSel === ""}
+                    onClick={() => setCidadeSel("")}
                   />
-                ))}
-                {cidades.length === 0 && (
-                  <li className="px-4 py-4 text-sm text-[var(--text-muted)]">Sem dados por cidade.</li>
-                )}
-              </ul>
+                  {cidades.map((c) => (
+                    <CidadeRow
+                      key={c.CIDADE}
+                      nome={c.CIDADE}
+                      estoque={c.ESTOQ_ATUAL}
+                      venda={c.VENDA_MEDIA}
+                      meses={c.MESES_ESTQ}
+                      ativa={cidadeSel.toUpperCase() === (c.CIDADE ?? "").toUpperCase()}
+                      onClick={() => setCidadeSel(c.CIDADE ?? "")}
+                    />
+                  ))}
+                  {cidades.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 text-sm text-[var(--text-muted)]">
+                        Sem dados por cidade.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             )}
           </div>
 
@@ -1096,7 +1114,7 @@ function ProdutoDetalhe({
   );
 }
 
-function CidadeItem({
+function CidadeRow({
   nome,
   estoque,
   venda,
@@ -1113,34 +1131,31 @@ function CidadeItem({
 }) {
   const k = meses !== undefined ? mesesClass(meses) : null;
   return (
-    <li>
-      <button
-        onClick={onClick}
-        className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-l-2 transition-colors ${
-          ativa
-            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-            : "border-transparent hover:bg-[var(--surface-2)]"
-        }`}
-      >
-        <div className="flex-1 min-w-0 text-sm truncate">{nome}</div>
-        {venda !== undefined && (
-          <span
-            title="Venda média mensal"
-            className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap"
-          >
-            {nf(venda, 1)} m/mês
+    <tr
+      onClick={onClick}
+      className={`cursor-pointer border-l-2 transition-colors ${
+        ativa
+          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+          : "border-transparent hover:bg-[var(--surface-2)]"
+      }`}
+    >
+      <td className="px-4 py-2.5 whitespace-nowrap">{nome}</td>
+      <td className="px-2 py-2.5 text-right tabular-nums whitespace-nowrap">
+        {venda !== undefined ? nf(venda, 1) : "—"}
+      </td>
+      <td className="px-2 py-2.5 text-right tabular-nums whitespace-nowrap">
+        {estoque.toLocaleString("pt-BR", { maximumFractionDigits: 3 })}
+      </td>
+      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+        {k ? (
+          <span className={`px-1.5 py-0.5 rounded text-[10px] border tabular-nums ${k.cls}`}>
+            {nf(meses ?? 0, 1)}
           </span>
+        ) : (
+          "—"
         )}
-        <span className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap">
-          {estoque.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} m
-        </span>
-        {k && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] border tabular-nums whitespace-nowrap ${k.cls}`}>
-            {nf(meses ?? 0, 1)} {(meses ?? 0) === 1 ? "mês" : "meses"}
-          </span>
-        )}
-      </button>
-    </li>
+      </td>
+    </tr>
   );
 }
 
