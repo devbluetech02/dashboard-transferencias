@@ -620,7 +620,7 @@ export default function EstoquePage() {
                   </span>
                   <span className="flex-1 min-w-0 text-sm truncate">{p.DESCRICAO}</span>
                   <span className="text-[11px] text-[var(--text-muted)] tabular-nums shrink-0 hidden sm:block">
-                    v. média <b className="text-[var(--text)]">{nf(p.VENDA_MEDIA)}</b>
+                    v. média <b className="text-[var(--text)]">{nf(p.VENDA_MEDIA)}</b> m/mês
                   </span>
                   <span className="px-1.5 py-0.5 rounded text-[10px] border text-rose-300 bg-rose-500/15 border-rose-500/30 tabular-nums shrink-0">
                     {nf(p.ESTOQ_ATUAL, 2)} m
@@ -640,8 +640,8 @@ export default function EstoquePage() {
                 <tr className="text-left text-xs text-[var(--text-muted)] border-b border-[var(--border)]">
                   <SortTh label="Código" col="CODPROD" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-4 py-3 font-medium">Produto</th>
-                  <SortTh label="Estoque" col="ESTOQ_ATUAL" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
-                  <SortTh label="Venda média" col="VENDA_MEDIA" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <SortTh label="Estoque (m)" col="ESTOQ_ATUAL" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <SortTh label="Venda média (m/mês)" col="VENDA_MEDIA" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <th className="px-4 py-3 font-medium text-right">Meses estq.</th>
                   <th className="px-4 py-3 font-medium">
                     <StatusFilter sel={statusSel} onChange={setStatusSel} />
@@ -946,7 +946,7 @@ function ProdutoDetalhe({
                 Estoque <b className="text-[var(--text)] tabular-nums">{nf(produto.ESTOQ_ATUAL)}</b> m
               </span>
               <span className="text-[var(--text-muted)]">
-                V. média <b className="text-[var(--text)] tabular-nums">{nf(produto.VENDA_MEDIA)}</b>
+                V. média <b className="text-[var(--text)] tabular-nums">{nf(produto.VENDA_MEDIA)}</b> m/mês
               </span>
               <span className="text-[var(--text-muted)]">
                 Meses <b className="text-[var(--text)] tabular-nums">{nf(produto.MESES_ESTQ, 1)}</b>
