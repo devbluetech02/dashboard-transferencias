@@ -1031,6 +1031,8 @@ function ProdutoDetalhe({
                 <CidadeItem
                   nome="Todas as cidades"
                   estoque={produto.ESTOQ_ATUAL}
+                  venda={produto.VENDA_MEDIA}
+                  meses={produto.MESES_ESTQ}
                   ativa={cidadeSel === ""}
                   onClick={() => setCidadeSel("")}
                 />
@@ -1039,6 +1041,7 @@ function ProdutoDetalhe({
                     key={c.CIDADE}
                     nome={c.CIDADE}
                     estoque={c.ESTOQ_ATUAL}
+                    venda={c.VENDA_MEDIA}
                     meses={c.MESES_ESTQ}
                     ativa={cidadeSel.toUpperCase() === (c.CIDADE ?? "").toUpperCase()}
                     onClick={() => setCidadeSel(c.CIDADE ?? "")}
@@ -1096,12 +1099,14 @@ function ProdutoDetalhe({
 function CidadeItem({
   nome,
   estoque,
+  venda,
   meses,
   ativa,
   onClick,
 }: {
   nome: string;
   estoque: number;
+  venda?: number;
   meses?: number;
   ativa: boolean;
   onClick: () => void;
@@ -1118,6 +1123,14 @@ function CidadeItem({
         }`}
       >
         <div className="flex-1 min-w-0 text-sm truncate">{nome}</div>
+        {venda !== undefined && (
+          <span
+            title="Venda média mensal"
+            className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap"
+          >
+            {nf(venda, 1)} m/mês
+          </span>
+        )}
         <span className="px-1.5 py-0.5 rounded text-[10px] border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] tabular-nums whitespace-nowrap">
           {estoque.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} m
         </span>
